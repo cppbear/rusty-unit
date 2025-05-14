@@ -25,14 +25,14 @@ mod monitor;
 mod options;
 mod traits;
 mod types;
-mod util;
+pub mod utils;
 mod writer;
 
 #[cfg(feature = "analysis")]
 use crate::hir::hir_analysis;
 use crate::mir::CUSTOM_OPT_MIR;
 use crate::options::RuConfig;
-use crate::util::rustc_get_crate_name;
+use crate::utils::rustc_get_crate_name;
 use clap::Parser;
 use log::{debug, info, warn};
 use rustc_driver::Compilation;
@@ -70,13 +70,13 @@ fn enter_with_fn<'tcx, TyCtxtFn>(queries: &'tcx rustc_interface::Queries<'tcx>, 
 where
     TyCtxtFn: Fn(TyCtxt),
 {
-    queries.global_ctxt().unwrap().peek_mut().enter(enter_fn);
+    queries.global_ctxt().unwrap().enter(enter_fn);
 }
 
 impl rustc_driver::Callbacks for CompilerCallbacks {
     fn config(&mut self, _config: &mut Config) {
-        _config.override_queries = Some(|session, local, external| {
-            local.optimized_mir = CUSTOM_OPT_MIR;
+        _config.override_queries = Some(|session, providers| {
+            providers.queries.optimized_mir = CUSTOM_OPT_MIR;
         });
     }
 
@@ -90,6 +90,26 @@ impl rustc_driver::Callbacks for CompilerCallbacks {
         Compilation::Continue
     }
 }
+
+// impl rustc_driver::Callbacks for RfocxtCallbacks {
+//     fn config(&mut self, config: &mut interface::Config) {
+//         self.source_name = format!("{:?}", config.input.source_name());
+//         config.crate_cfg.push("rfocxt".to_string());
+//         info!("Source file: {}", self.source_name);
+//     }
+
+//     fn after_expansion<'tcx>(
+//         &mut self,
+//         _compiler: &interface::Compiler,
+//         _queries: &'tcx Queries<'tcx>,
+//     ) -> Compilation {
+//         _queries
+//             .global_ctxt()
+//             .unwrap()
+//             .enter(|tcx| self.run_analysis(tcx));
+//         Compilation::Continue
+//     }
+// }
 
 pub fn arg_value<'a>(
     args: impl IntoIterator<Item = &'a String>,
@@ -172,9 +192,11 @@ fn run_rustc() -> Result<(), i32> {
         fs::create_dir_all(LOG_DIR).expect("Could not create the log directory");
     }
 
-    let std_env_args: Vec<String> = std::env::args().collect();
+    let mut std_env_args: Vec<String> = std::env::args().collect();
+    // println!("{:#?}", std_env_args);
 
     let rustc_args = get_compiler_args(&std_env_args);
+    // println!("{:#?}", rustc_args);
 
     let do_instrument = rustc_get_crate_name(&rustc_args) == RuConfig::env_crate_name();
 
@@ -205,9 +227,9 @@ pub fn pass_to_rustc(rustc_args: &[String], instrumentation: bool) {
     }
 }
 
-fn main() {
-    // Initialize the logger
-    env_logger::init();
+// fn main() {
+//     // Initialize the logger
+//     env_logger::init();
 
-    exit(run_rustc().err().unwrap_or(0))
-}
+//     exit(run_rustc().err().unwrap_or(0))
+// }

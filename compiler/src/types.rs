@@ -1,9 +1,10 @@
-use crate::util::is_local;
+use crate::utils::is_local;
 use log::{error, info};
 use rustc_ast::{FloatTy, IntTy, UintTy};
 use rustc_hir::def::CtorKind;
 use rustc_hir::def_id::DefId;
 use rustc_hir::{BodyId, FnSig, HirId, PrimTy};
+use rustc_middle::ty::ClauseKind;
 use rustc_middle::ty::{
     AdtDef, AdtKind, Binder, FloatTy as MirFloat, GenericParamDefKind, IntTy as MirInt,
     PredicateKind, Ty, TyCtxt, TyKind, TypeFoldable,
@@ -463,16 +464,16 @@ fn adt_def_to_t(adt_def: &AdtDef, tcx: &TyCtxt<'_>) -> RuTy {
                     .iter()
                     .map(|f| {
                         let field_name = f.name.to_string();
-                        let field_t = mir_ty_to_t(tcx.type_of(f.did), tcx);
+                        let field_t = mir_ty_to_t(tcx.type_of(f.did).skip_binder(), tcx);
                         RuParam::new(Some(&field_name), field_t, false)
                     })
                     .collect::<Vec<_>>();
 
-                match variant.ctor_kind {
-                    CtorKind::Fn => {
+                match variant.ctor_kind() {
+                    Some(CtorKind::Fn) => {
                         variants.push(RuEnumVariant::Tuple(variant_name, params));
                     }
-                    _ => todo!("{:?}", variant.ctor_kind),
+                    _ => todo!("{:?}", variant.ctor_kind()),
                 }
             }
 
@@ -502,7 +503,7 @@ pub fn generics_of_item(def_id: DefId, tcx: &TyCtxt<'_>) -> Vec<RuTy> {
             let binder = predicate.kind();
 
             match binder.skip_binder() {
-                PredicateKind::Trait(trait_predicate) => {
+                ClauseKind::Trait(trait_predicate) => {
                     let self_ty = trait_predicate.self_ty();
                     let name = ty_name(self_ty);
                     let trait_ = trait_def_to_trait(trait_predicate.def_id(), tcx);
@@ -510,8 +511,8 @@ pub fn generics_of_item(def_id: DefId, tcx: &TyCtxt<'_>) -> Vec<RuTy> {
 
                     Some(g)
                 }
-                PredicateKind::RegionOutlives(_) => None,
-                PredicateKind::TypeOutlives(_) => None,
+                ClauseKind::RegionOutlives(_) => None,
+                ClauseKind::TypeOutlives(_) => None,
                 _ => todo!("{:?}", binder.skip_binder()),
             }
         })
@@ -624,8 +625,10 @@ impl From<PrimTy> for RuTy {
             }
             PrimTy::Float(float_ty) => {
                 let float_ty = match float_ty {
+                    FloatTy::F16 => RuFloat::F16,
                     FloatTy::F32 => RuFloat::F32,
                     FloatTy::F64 => RuFloat::F64,
+                    FloatTy::F128 => RuFloat::F128,
                 };
                 RuPrim::Float(float_ty)
             }
@@ -1392,15 +1395,19 @@ impl RuUInt {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub enum RuFloat {
+    F16,
     F32,
     F64,
+    F128,
 }
 
 impl RuFloat {
     pub fn name_str(self) -> &'static str {
         match self {
+            RuFloat::F16 => "f16",
             RuFloat::F32 => "f32",
             RuFloat::F64 => "f64",
+            RuFloat::F128 => "f128",
         }
     }
 }

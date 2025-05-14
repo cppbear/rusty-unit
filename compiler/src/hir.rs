@@ -1,10 +1,11 @@
 use crate::analysis::Analysis;
 use crate::mir::def_id_to_str;
+use crate::rustc_hir::intravisit::Map;
 use crate::types::{
     def_id_name, FieldAccessItem, RuCallable, RuEnum, RuEnumInit, RuEnumVariant, RuFunction,
     RuMethod, RuParam, RuStaticMethod, RuStruct, RuStructInit, RuTrait, RuTy,
 };
-use crate::util::{
+use crate::utils::{
     def_id_to_enum, def_id_to_t, fn_ret_ty_to_t, generics_to_ts, impl_to_def_id, is_local,
     item_to_name, node_to_name, path_to_name, res_to_name, span_to_path, ty_to_name, ty_to_param,
     ty_to_t,
@@ -14,9 +15,14 @@ use crate::writer::{HirObject, HirObjectBuilder, HirWriter};
 use crate::{RuConfig, HIR_LOG_PATH, LOG_DIR};
 use log::{debug, info, warn};
 use petgraph::visit::Walker;
-use rustc_ast::{CrateSugar, IsAuto};
+use rustc_ast::IsAuto;
 use rustc_data_structures::undo_log::UndoLogs;
-use rustc_hir::{AssocItemKind, BodyId, EnumDef, FnSig, Generics, HirId, Impl, ImplItemKind, Item, ItemKind, Node, Unsafety, Variant, VariantData, Visibility, VisibilityKind};
+use rustc_hir::Safety;
+use rustc_hir::{
+    AssocItemKind, BodyId, EnumDef, FnSig, Generics, HirId, Impl, ImplItemKind, Item, ItemKind,
+    Node, Variant, VariantData,
+};
+use rustc_middle::ty::Visibility;
 use rustc_middle::ty::{Ty, TyCtxt};
 use rustc_span::def_id::{DefId, LocalDefId, LOCAL_CRATE};
 use rustc_span::Span;
@@ -31,12 +37,12 @@ pub fn hir_analysis(tcx: TyCtxt<'_>) {
     // }
 
     let mut callables = vec![];
-    for item in tcx.hir().items() {
-        let def_id = item.def_id.to_def_id();
+    for i in tcx.hir().items() {
+        let item = tcx.hir().item(i);
+        let def_id = item.owner_id.to_def_id();
         if def_id_to_str(def_id, &tcx).contains("serde") {
             continue;
         }
-
 
         let span: &Span = &item.span;
         let file_path = span_to_path(span, &tcx);
@@ -63,9 +69,9 @@ pub fn hir_analysis(tcx: TyCtxt<'_>) {
                     info!("HIR: Analyzing function {}", item_to_name(item, &tcx));
                     analyze_fn(
                         sig,
-                        item.def_id,
+                        i.owner_id.def_id,
                         body_id,
-                        &item.vis,
+                        tcx.visibility(i.owner_id.to_def_id()),
                         generics,
                         file_path.unwrap(),
                         &mut callables,
@@ -83,10 +89,10 @@ pub fn hir_analysis(tcx: TyCtxt<'_>) {
                 if allowed_item(item, &tcx) {
                     info!("HIR: Analyzing struct {}", item_to_name(item, &tcx));
                     analyze_struct(
-                        item.def_id,
+                        item.owner_id.def_id,
                         s,
                         g,
-                        &item.vis,
+                        tcx.visibility(i.owner_id.to_def_id()),
                         file_path.unwrap(),
                         &mut callables,
                         &tcx,
@@ -97,10 +103,10 @@ pub fn hir_analysis(tcx: TyCtxt<'_>) {
                 if allowed_item(item, &tcx) {
                     info!("HIR: Analyzing enum {}", item_to_name(item, &tcx));
                     analyze_enum(
-                        item.def_id,
+                        item.owner_id.def_id,
                         enum_def,
                         g,
-                        &item.vis,
+                        tcx.visibility(i.owner_id.to_def_id()),
                         file_path.unwrap(),
                         &mut callables,
                         &tcx,
@@ -147,35 +153,35 @@ fn analyze_fn(
     sig: &FnSig,
     local_def_id: LocalDefId,
     body_id: &BodyId,
-    vis: &Visibility<'_>,
+    vis: Visibility<DefId>,
     generics: &Generics,
     file_path: PathBuf,
     callables: &mut Vec<RuCallable>,
     tcx: &TyCtxt<'_>,
 ) {
-    if let Unsafety::Unsafe = sig.header.unsafety {
+    if let Safety::Unsafe = sig.header.safety {
         // Skip unsafe functions
         return;
     }
 
-    let parent_node = tcx.hir().find_parent_node(tcx.hir().local_def_id_to_hir_id(local_def_id));
-    if let Some(parent) = parent_node {
-        if let Some(parent_node) = tcx.hir().find(parent) {
-            if let Node::Item(item) = &parent_node {
-                if let ItemKind::Fn(_, _, _) = &item.kind {
-                    // Ignore functions that are defined within another functions
-                    return;
-                }
-            }
+    let parent_node = tcx
+        .hir()
+        .get_parent_item(tcx.local_def_id_to_hir_id(local_def_id));
+    let parent_hir_id = tcx.local_def_id_to_hir_id(parent_node.def_id);
+    let parent_node = tcx.hir().hir_node(parent_hir_id);
+    if let Node::Item(item) = &parent_node {
+        if let ItemKind::Fn(_, _, _) = &item.kind {
+            // Ignore functions that are defined within another functions
+            return;
         }
     }
 
-    let hir_id = tcx.hir().local_def_id_to_hir_id(local_def_id);
+    let hir_id = tcx.local_def_id_to_hir_id(local_def_id);
     let global_id = def_id_to_str(local_def_id.to_def_id(), &tcx).replace("::", "__");
     let is_public = is_public(vis);
     let fn_decl = &sig.decl;
 
-    let fn_name = node_to_name(&tcx.hir().get(hir_id), tcx).unwrap();
+    let fn_name = node_to_name(&tcx.hir().hir_node(hir_id), tcx).unwrap();
     //let fn_name = tcx.hir().get(hir_id).ident().unwrap().to_string();
 
     let fn_generics = generics_to_ts(generics, None, None, tcx);
@@ -214,22 +220,20 @@ fn analyze_enum(
     enum_local_def_id: LocalDefId,
     enum_def: &EnumDef,
     g: &Generics,
-    visibility: &Visibility,
+    visibility: Visibility<DefId>,
     file_path: PathBuf,
     callables: &mut Vec<RuCallable>,
     tcx: &TyCtxt<'_>,
 ) {
     let is_public = is_public(visibility);
-    let enum_hir_id = tcx.hir().local_def_id_to_hir_id(enum_local_def_id);
-    let enum_def_id = tcx.hir().local_def_id(enum_hir_id).to_def_id();
-    let self_name = node_to_name(&tcx.hir().get(enum_hir_id), tcx).unwrap();
+    let enum_hir_id = tcx.local_def_id_to_hir_id(enum_local_def_id);
+    let enum_def_id = enum_local_def_id.to_def_id();
+    let self_name = node_to_name(&tcx.hir().hir_node(enum_hir_id), tcx).unwrap();
 
     let self_ty = RuTy::Struct(RuStruct::new(&self_name, vec![], is_local(enum_def_id)));
 
     let generics = generics_to_ts(g, Some(&self_ty), None, tcx);
     if let Some(generics) = generics {
-
-
         //let self_ty = def_id_to_enum(enum_def_id, tcx).unwrap();
         let self_ty = RuTy::Enum(RuEnum::new(
             &self_name,
@@ -275,9 +279,9 @@ fn extract_enum_variant(
     tcx: &TyCtxt<'_>,
 ) -> Option<RuEnumVariant> {
     match &variant.data {
-        VariantData::Struct(fields, _) => {
-            let def_id = tcx.hir().local_def_id(variant.id).to_def_id();
-            let struct_name = node_to_name(&tcx.hir().get(variant.id), tcx).unwrap();
+        VariantData::Struct { fields, .. } => {
+            let def_id = variant.def_id.to_def_id();
+            let struct_name = node_to_name(&tcx.hir().hir_node(variant.hir_id), tcx).unwrap();
             let params = fields
                 .iter()
                 .filter_map(|f| ty_to_param(Some(f.ident.as_str()), f.ty, None, None, &vec![], tcx))
@@ -291,7 +295,7 @@ fn extract_enum_variant(
             let v = RuEnumVariant::Struct(variant.ident.name.to_ident_string(), params);
             Some(v)
         }
-        VariantData::Tuple(fields, variant_hir_id) => {
+        VariantData::Tuple(fields, variant_hir_id, ..) => {
             debug!("--> ENUM variant extracting {:?}", variant_hir_id);
             let params = fields
                 .iter()
@@ -305,7 +309,7 @@ fn extract_enum_variant(
             let v = RuEnumVariant::Tuple(variant.ident.name.to_ident_string(), params);
             Some(v)
         }
-        VariantData::Unit(_) => Some(RuEnumVariant::Unit(variant.ident.name.to_ident_string())),
+        VariantData::Unit(_, _) => Some(RuEnumVariant::Unit(variant.ident.name.to_ident_string())),
     }
 }
 
@@ -313,7 +317,7 @@ fn analyze_struct(
     struct_local_def_id: LocalDefId,
     vd: &VariantData,
     g: &Generics,
-    vis: &Visibility<'_>,
+    vis: Visibility<DefId>,
     file_path: PathBuf,
     callables: &mut Vec<RuCallable>,
     tcx: &TyCtxt<'_>,
@@ -322,16 +326,17 @@ fn analyze_struct(
 
     let struct_generics = generics_to_ts(g, None, None, tcx);
     if let Some(struct_generics) = struct_generics {
-        let struct_hir_id = tcx.hir().local_def_id_to_hir_id(struct_local_def_id);
+        let struct_hir_id = tcx.local_def_id_to_hir_id(struct_local_def_id);
         match vd {
-            VariantData::Struct(fields, _) => {
-                let def_id = tcx.hir().local_def_id(struct_hir_id).to_def_id();
+            VariantData::Struct { fields, .. } => {
+                let def_id = struct_local_def_id.to_def_id();
                 //let self_ty = def_id_to_t(def_id, tcx).unwrap();
-                let self_name = node_to_name(&tcx.hir().get(struct_hir_id), tcx).unwrap();
+                let self_name = node_to_name(&tcx.hir().hir_node(struct_hir_id), tcx).unwrap();
                 info!("HIR: {} is public: {}", self_name, struct_is_public);
                 let generics = generics_to_ts(g, None, None, tcx);
                 if let Some(generics) = generics {
-                    let self_ty = RuTy::Struct(RuStruct::new(&self_name, generics, is_local(def_id)));
+                    let self_ty =
+                        RuTy::Struct(RuStruct::new(&self_name, generics, is_local(def_id)));
                     if self_name.contains("serde") {
                         // Skip too hard stuff
                         return;
@@ -340,9 +345,14 @@ fn analyze_struct(
                     for field in fields.iter() {
                         let ty = ty_to_t(field.ty, Some(&self_ty), None, &struct_generics, tcx);
                         if let Some(ty) = ty {
-                            let def_id = tcx.hir().local_def_id(struct_hir_id).to_def_id();
+                            let def_id = struct_local_def_id.to_def_id();
 
-                            let field_name = tcx.hir().get(field.hir_id).ident().unwrap().to_string();
+                            let field_name = tcx
+                                .hir()
+                                .hir_node(field.hir_id)
+                                .ident()
+                                .unwrap()
+                                .to_string();
                             debug!("HIR: Extracted field {}::{}", &self_name, &field_name);
 
                             /*let parent = def_id_to_t(def_id, tcx).unwrap();
@@ -355,7 +365,7 @@ fn analyze_struct(
                             );*/
                         }
 
-                        let field_is_public = is_public(&field.vis);
+                        let field_is_public = is_public(tcx.visibility(field.def_id.to_def_id()));
                         if !field_is_public {
                             struct_is_public = false;
                         }
@@ -392,7 +402,6 @@ fn analyze_struct(
             _ => {}
         }
     }
-
 }
 
 fn analyze_impl_items(
@@ -406,12 +415,12 @@ fn analyze_impl_items(
     for item in items {
         let impl_item = tcx.hir().impl_item(item.id);
         match &impl_item.kind {
-            ImplItemKind::TyAlias(ty) => {
+            ImplItemKind::Type(ty) => {
                 let t = ty_to_t(ty, Some(&self_ty), None, &impl_generics, tcx);
                 if let Some(t) = t {
                     let associated_type_name = tcx
                         .hir()
-                        .name(tcx.hir().local_def_id_to_hir_id(ty.hir_id.owner))
+                        .name(tcx.local_def_id_to_hir_id(ty.hir_id.owner))
                         .to_string();
                     associated_types.insert(associated_type_name, t);
                 }
@@ -429,8 +438,8 @@ fn analyze_super_traits(
     impl_generics: &Vec<RuTy>,
     tcx: &TyCtxt<'_>,
 ) {
-    for t in tcx.super_predicates_of(trait_).predicates {
-        let pred = t.0.to_opt_poly_trait_pred();
+    for t in tcx.explicit_super_predicates_of(trait_).predicates {
+        let pred = t.0.as_predicate().as_trait_clause();
         if let Some(pred) = pred {
             info!("Super trait: {:?}", pred.def_id());
 
@@ -458,7 +467,7 @@ fn analyze_super_traits(
 
 fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, tcx: &TyCtxt<'_>) {
     let parent_def_id_opt = impl_to_def_id(im, tcx);
-    if let Unsafety::Unsafe = im.unsafety {
+    if let Safety::Unsafe = im.safety {
         // Skip unsafe functions
         return;
     }
@@ -477,9 +486,7 @@ fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, 
 
     let parent_def_id = parent_def_id_opt.unwrap();
 
-    let parent_hir_id = tcx
-        .hir()
-        .local_def_id_to_hir_id(parent_def_id.expect_local());
+    let parent_hir_id = tcx.local_def_id_to_hir_id(parent_def_id.expect_local());
 
     let impl_generics = generics_to_ts(&im.generics, None, None, tcx);
     if let Some(impl_generics) = impl_generics {
@@ -507,24 +514,32 @@ fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, 
         info!("Created mapping: {:?}", associated_types);
 
         for item in items {
-
-            let item_def_id = item.id.def_id;
+            let item_def_id = item.id.owner_id.def_id;
             let global_id = def_id_to_str(item_def_id.to_def_id(), tcx).replace("::", "__");
 
-            let hir_id = tcx.hir().local_def_id_to_hir_id(item_def_id);
+            let hir_id = tcx.local_def_id_to_hir_id(item_def_id);
             let impl_item = tcx.hir().impl_item(item.id);
             match &impl_item.kind {
                 ImplItemKind::Fn(sig, body_id) => {
-                    if let Unsafety::Unsafe = sig.header.unsafety {
+                    if let Safety::Unsafe = sig.header.safety {
                         continue;
                     }
                     debug!(
                         "HIR: Found method {}, parent: {}",
                         &impl_item.ident, parent_hir_id
                     );
-                    let fn_name = tcx.hir().get(item.id.hir_id()).ident().unwrap().to_string();
-                    let fn_generics =
-                        generics_to_ts(&impl_item.generics, Some(&self_ty), Some(&associated_types), tcx);
+                    let fn_name = tcx
+                        .hir()
+                        .hir_node(item.id.hir_id())
+                        .ident()
+                        .unwrap()
+                        .to_string();
+                    let fn_generics = generics_to_ts(
+                        &impl_item.generics,
+                        Some(&self_ty),
+                        Some(&associated_types),
+                        tcx,
+                    );
                     if let Some(fn_generics) = fn_generics {
                         let mut overall_generics = impl_generics.clone();
                         overall_generics.append(&mut fn_generics.clone());
@@ -541,8 +556,9 @@ fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, 
                             debug!("HIR: Return type is {:?}", &return_type);
                         }
 
-                        let is_public = is_public(&impl_item.vis);
-                        let parent_name = node_to_name(&tcx.hir().get(parent_hir_id), tcx).unwrap();
+                        let is_public = is_public(tcx.visibility(impl_item.owner_id.to_def_id()));
+                        let parent_name =
+                            node_to_name(&tcx.hir().hir_node(parent_hir_id), tcx).unwrap();
                         if parent_name.contains("serde") {
                             // Skip too hard stuff
                             warn!("HIR: Skipping serde method");
@@ -606,7 +622,7 @@ fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, 
                         }
                     }
                 }
-                ImplItemKind::TyAlias(ty) => {
+                ImplItemKind::Type(ty) => {
                     info!("Impl ty alias: {:?}", ty);
                 }
                 _ => {}
@@ -615,13 +631,9 @@ fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, 
     }
 }
 
-fn is_public(vis: &Visibility<'_>) -> bool {
-    match &vis.node {
-        VisibilityKind::Public => true,
-        VisibilityKind::Crate(sugar) => match sugar {
-            CrateSugar::PubCrate => true,
-            _ => false,
-        },
+fn is_public(vis: Visibility<DefId>) -> bool {
+    match &vis {
+        Visibility::Public => true,
         _ => false,
     }
 }

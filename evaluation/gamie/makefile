@@ -1,4 +1,4 @@
-SHELL:=/bin/bash
+SHELL:=/usr/bin/zsh
 INSTRUMENTER := ${RU_BIN}/instrumentation
 ANALYZER := ${RU_BIN}/analysis
 JAR := ${RU_BIN}/rusty-unit.jar

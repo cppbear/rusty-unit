@@ -1,4 +1,4 @@
-SHELL:=/bin/bash
+SHELL:=/usr/bin/zsh
 
 bin/analysis :
 	@export RUSTFLAGS="-A dead_code -A unused_variables -A unused_imports -A unused_mut" && \

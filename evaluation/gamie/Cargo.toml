@@ -42,7 +42,7 @@ rand = "0.8"
 all-features = true
 
 [dependencies.redis]
-version = "0.23.1"
+version = "0.11.0"
 
 [dependencies.ntest]
 version = "0.7.5"

@@ -6,11 +6,17 @@ edition = "2021"
 [[bin]]
 name = "instrumentation"
 required-features = ["instrumentation"]
+path = "src/bin/rusty.rs"
+
 
 [[bin]]
 name = "analysis"
-required-features = ["analysis", "file_writer"]
-path = "src/main.rs"
+required-features = ["analysis", "instrumentation", "file_writer"]
+path = "src/bin/rusty.rs"
+
+[[bin]]
+name = "cargo-rusty"
+required-features = ["analysis", "instrumentation", "file_writer"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -32,20 +38,9 @@ toml = "0.5.8"
 which = "4.2.4"
 dircpy-stable = "0.3.5"
 derive_builder = "0.10.2"
+cargo_metadata = "0.18"
+time = "0.3.41"
+simplelog = "0.12.2"
 
 [dependencies.redis]
-version = "0.23.1"
-
-
-[target.'cfg(NOT_A_PLATFORM)'.dependencies]
-rustc_driver = { path = "rust/compiler/rustc_driver" }
-rustc_interface = { path = "rust/compiler/rustc_interface" }
-rustc_middle = { path = "rust/compiler/rustc_middle" }
-rustc_session = { path = "rust/compiler/rustc_session" }
-rustc_data_structures = { path = "rust/compiler/rustc_data_structures" }
-rustc_span = { path = "rust/compiler/rustc_span" }
-rustc_hir = { path = "rust/compiler/rustc_hir" }
-rustc_target = { path = "rust/compiler/rustc_target" }
-rustc_index = { path = "rust/compiler/rustc_index" }
-rustc_ast = { path = "rust/compiler/rustc_ast" }
-rustc_apfloat = { path = "rust/compiler/rustc_apfloat" }
+version = "0.11.0"

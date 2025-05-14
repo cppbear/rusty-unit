@@ -3,8 +3,9 @@ use crate::data_structures::{cdg, log_graph_to, visualize_graph};
 use crate::data_structures::{original_cfg, truncated_cfg};
 use crate::mir::ValueDef::Var;
 use crate::monitor::{BinaryOp, UnaryOp};
+use crate::rustc_middle::ty::inherent::Ty as NTy;
 use crate::types::{ty_name, RuConstVal, RuPrim, RuTy};
-use crate::util::{ty_to_name, ty_to_t, tys_to_t};
+use crate::utils::{ty_to_name, ty_to_t, tys_to_t};
 #[cfg(feature = "analysis")]
 use crate::writer::{MirObject, MirObjectBuilder, MirWriter};
 use crate::{RuConfig, DOT_DIR, INSTRUMENTED_MIR_LOG_NAME, LOG_DIR};
@@ -12,27 +13,37 @@ use log::{debug, error, info, warn};
 use petgraph::dot::Dot;
 use rustc_apfloat::ieee::Double;
 use rustc_ast::Mutability;
-use rustc_data_structures::graph::WithNumNodes;
 use rustc_hir::def_id::DefId;
 use rustc_hir::{HirId, ItemKind};
-use rustc_index::vec::IndexVec;
-use rustc_middle::mir::interpret::{Allocation, ConstValue, Scalar};
+use rustc_index::IndexVec;
+use rustc_middle::mir::interpret::{Allocation, Scalar};
 use rustc_middle::mir::visit::{MutVisitor, PlaceContext, TyContext};
+use rustc_middle::mir::CallSource;
+use rustc_middle::mir::ConstOperand;
+use rustc_middle::mir::ConstValue;
 use rustc_middle::mir::StatementKind::{Assign, SetDiscriminant};
+use rustc_middle::mir::UnwindAction;
 use rustc_middle::mir::{
-    AssertMessage, BasicBlock, BasicBlockData, BinOp, Body, CastKind, Constant, ConstantKind,
-    Coverage, HasLocalDecls, Local, LocalDecl, LocalDecls, Location, Operand, Place, PlaceElem,
-    RetagKind, Rvalue, SourceInfo, SourceScope, SourceScopeData, Statement, StatementKind,
-    SwitchTargets, Terminator, TerminatorKind, UnOp, UserTypeProjection, VarDebugInfo,
+    AssertMessage, BasicBlock, BasicBlockData, BinOp, Body, CastKind, HasLocalDecls, Local,
+    LocalDecl, LocalDecls, Location, Operand, Place, PlaceElem, RetagKind, Rvalue, SourceInfo,
+    SourceScope, SourceScopeData, Statement, StatementKind, SwitchTargets, Terminator,
+    TerminatorKind, UnOp, UserTypeProjection, VarDebugInfo,
 };
+use rustc_middle::query::queries::optimized_mir::LocalKey;
+use rustc_middle::query::queries::optimized_mir::ProvidedValue;
 use rustc_middle::ty;
 use rustc_middle::ty::layout::{HasTyCtxt, LayoutOf, MaybeResult};
-use rustc_middle::ty::subst::SubstsRef;
+use rustc_middle::ty::FloatTy;
+use rustc_middle::ty::TyKind;
+use rustc_middle::ty::ValTree;
 use rustc_middle::ty::{
-    CanonicalUserTypeAnnotation, Const, ConstKind, ConstS, List, Region, RegionKind, ScalarInt, Ty,
-    TyCtxt, TypeAndMut, UintTy, Variance,
+    CanonicalUserTypeAnnotation, Const, ConstKind, List, Region, RegionKind, ScalarInt, Ty, TyCtxt,
+    TypeAndMut, UintTy, Variance,
 };
+use rustc_span::def_id::LocalDefId;
+use rustc_span::source_map::Spanned;
 use rustc_span::Span;
+use rustc_target::abi::Size;
 use rustc_target::abi::{Align, VariantIdx};
 use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
@@ -41,64 +52,73 @@ use std::ops::{Add, Index};
 use std::path::Path;
 use std::str::FromStr;
 
-pub const CUSTOM_OPT_MIR: for<'tcx> fn(_: TyCtxt<'tcx>, _: DefId) -> &'tcx Body<'tcx> =
+pub const CUSTOM_OPT_MIR: for<'tcx> fn(_: TyCtxt<'tcx>, _: LocalDefId) -> &'tcx Body<'tcx> =
     |tcx, def| {
+        let local_def_id = def;
+        let def_id = def.to_def_id();
+        println!("{:#?}", def_id);
         let opt_mir = rustc_interface::DEFAULT_QUERY_PROVIDERS
             .borrow()
             .optimized_mir;
-        let body = opt_mir(tcx, def).clone();
-        let crate_name = tcx.crate_name(def.krate);
-        let hir_id = tcx.hir().local_def_id_to_hir_id(def.expect_local());
+        let body = opt_mir(tcx, local_def_id).clone();
+        let crate_name = tcx.crate_name(def_id.krate);
+        let hir_id = tcx.local_def_id_to_hir_id(local_def_id);
+        let body_ref = tcx.arena.alloc(body);
 
         if crate_name.as_str() != RuConfig::env_crate_name()
             || is_rusty_monitor(hir_id, &tcx)
-            || !allowed_item(def)
+            || !allowed_item(def_id)
         {
             // Don't instrument extern crates
-            return tcx.arena.alloc(body);
+            return body_ref;
         }
 
         let item_name = tcx.hir().opt_name(hir_id);
         if let None = item_name {
-            return tcx.arena.alloc(body);
+            return body_ref;
         };
 
-        let global_id = def_id_to_str(def, &tcx).replace("::", "__");
+        let global_id = def_id_to_str(def_id, &tcx).replace("::", "__");
 
         #[cfg(feature = "analysis")]
         info!("MIR: Analyzing {:?}", def);
 
         #[cfg(feature = "analysis")]
-        let (cfg, _) = truncated_cfg(&body);
+        let (cfg, _) = truncated_cfg(body_ref);
         #[cfg(feature = "analysis")]
         let cdg = cdg(&cfg);
 
         #[cfg(feature = "analysis")]
-        let orig_blocks;
+        let mut orig_blocks: Vec<String> = Vec::new();
         #[cfg(feature = "analysis")]
         let orig_truncated_cfg;
         #[cfg(feature = "analysis")]
         let locals_str;
         #[cfg(feature = "analysis")]
         {
-            orig_blocks = body
-                .basic_blocks()
-                .iter_enumerated()
-                .map(|(block, data)| format!("{} -> {:?}", block.as_usize(), data))
-                .collect::<Vec<_>>();
+            let mut basic_blocks = body_ref.basic_blocks.reverse_postorder();
+            for basic_block in basic_blocks.iter() {
+                let data = body_ref.basic_blocks.get(*basic_block);
+                orig_blocks.push(format!("{} -> {:?}", basic_block.as_usize(), data));
+            }
+            // orig_blocks = body
+            //     .basic_blocks
+            //     .iter_enumerated()
+            //     .map(|(block, data)| format!("{} -> {:?}", block.as_usize(), data))
+            //     .collect::<Vec<_>>();
 
             if cfg!(file_writer) {
                 let path = Path::new(DOT_DIR).join(format!("{}.dot", &global_id));
                 visualize_graph(&cdg, &global_id);
             }
 
-            let locals_decls: &LocalDecls = &body.local_decls;
+            let locals_decls: &LocalDecls = &body_ref.local_decls;
             locals_str = locals_decls
                 .iter_enumerated()
                 .map(|(local, decl)| format!("{:?} -> {:?}", local, decl))
                 .collect::<Vec<_>>();
-            let (cfg, _) = original_cfg(&body);
-            let (truncated_cfg, _) = truncated_cfg(&body);
+            let (cfg, _) = original_cfg(body_ref);
+            let (truncated_cfg, _) = truncated_cfg(body_ref);
             orig_truncated_cfg = truncated_cfg;
         }
 
@@ -108,7 +128,7 @@ pub const CUSTOM_OPT_MIR: for<'tcx> fn(_: TyCtxt<'tcx>, _: DefId) -> &'tcx Body<
         }
 
         // INSTRUMENT OR ANALYZE
-        let mut mir_visitor = MirVisitor::new(&global_id, body.clone(), tcx);
+        let mut mir_visitor = MirVisitor::new(&global_id, body_ref.clone(), tcx);
         let mut instrumented_body = mir_visitor.visit();
 
         // Write down things that happen before the instrumentation
@@ -132,7 +152,9 @@ pub const CUSTOM_OPT_MIR: for<'tcx> fn(_: TyCtxt<'tcx>, _: DefId) -> &'tcx Body<
 
         #[cfg(feature = "analysis")]
         {
-            let (basic_blocks, local_decls) = instrumented_body.basic_blocks_and_local_decls_mut();
+            let basic_blocks = instrumented_body.clone().basic_blocks_mut().clone();
+            let local_decls = instrumented_body.local_decls.clone();
+            // let (basic_blocks, local_decls) = instrumented_body.basic_blocks_and_local_decls_mut();
 
             let locals = local_decls
                 .iter_enumerated()
@@ -162,7 +184,7 @@ pub fn def_id_to_str(def_id: DefId, tcx: &TyCtxt<'_>) -> String {
     tcx.def_path_str(def_id)
 }
 
-fn allowed_item(id: DefId) -> bool {
+pub fn allowed_item(id: DefId) -> bool {
     let name = format!("{:?}", id);
     !(name.contains("serialize") || name.contains("deserialize") || name.contains("tests"))
 }
@@ -181,16 +203,16 @@ pub struct MirVisitor<'tcx> {
     constant_pool: Vec<RuConstVal>,
     // Stores the computed branch distance for a variable for (true, false) branches
     alias_map: HashMap<Local, (Local, Local)>,
-    assertions: u64
+    assertions: u64,
 }
 
 impl<'tcx> MirVisitor<'tcx> {
-    fn new(global_id: &str, body: Body<'tcx>, tcx: TyCtxt<'tcx>) -> Self {
+    pub fn new(global_id: &str, body: Body<'tcx>, tcx: TyCtxt<'tcx>) -> Self {
         MirVisitor {
             tcx,
             global_id: global_id.to_string(),
             locals_num: body.local_decls.len(),
-            basic_blocks_num: body.num_nodes(),
+            basic_blocks_num: body.basic_blocks.len(),
             body,
             assertions: 0,
             branch_counter: 0,
@@ -205,17 +227,28 @@ impl<'tcx> MirVisitor<'tcx> {
         self.branch_counter
     }
 
-    fn visit(&mut self) -> Body<'tcx> {
+    pub fn visit(&mut self) -> Body<'tcx> {
         let mut body = self.body.clone();
         self.visit_body(&mut body);
         body
     }
 
     fn switch_value_to_const(&self, switch_ty: Ty<'tcx>, value: u128) -> Const<'tcx> {
+        // let param_env = ty::ParamEnv::empty();
+        // let switch_ty = self.tcx.lift(switch_ty).unwrap();
+        // let size = self.tcx.layout_of(param_env.and(switch_ty)).unwrap().size;
+        // ty::Const::from_scalar(self.tcx, Scalar::from_uint(value, size), switch_ty)
+        // 1. 创建空的参数环境（无泛型约束）
         let param_env = ty::ParamEnv::empty();
-        let switch_ty = self.tcx.lift(switch_ty).unwrap();
-        let size = self.tcx.layout_of(param_env.and(switch_ty)).unwrap().size;
-        ty::Const::from_scalar(self.tcx, Scalar::from_uint(value, size), switch_ty)
+
+        // 2. 将类型与参数环境封装为 ParamEnvAnd
+        let param_env_and_ty = ty::ParamEnvAnd {
+            param_env,
+            value: switch_ty,
+        };
+
+        // 3. 直接通过整数位值构建常量（无需手动处理布局和 Scalar）
+        ty::Const::from_bits(self.tcx, value, param_env_and_ty)
     }
 
     fn mk_place(&self, index: usize) -> Place<'tcx> {
@@ -230,39 +263,50 @@ impl<'tcx> MirVisitor<'tcx> {
     }
 
     fn mk_const_f64(&self, data: f64) -> Const<'tcx> {
-        let const_arg = Const::from_value(
-            self.tcx(),
-            ConstValue::Scalar(Scalar::from_f64(Double::from_str("1.0").unwrap())),
-            self.tcx.types.f64,
-        );
+        // let const_arg = Const::from_value(
+        //     self.tcx(),
+        //     ConstValue::Scalar(Scalar::from_f64(Double::from_str("1.0").unwrap())),
+        //     self.tcx.types.f64,
+        // );
 
-        const_arg
+        // const_arg
+        // 1. 将 f64 转换为 u64 位模式（IEEE 754 标准）
+        let bits = 1.0_f64.to_bits();
+
+        // 2. 将位模式包装为 ScalarInt
+        let scalar_int =
+            ScalarInt::try_from_uint(bits, Size::from_bytes(8)).expect("f64 should fit in 8 bytes");
+
+        // 3. 构建 ValTree 的 Leaf 节点
+        let val_tree = ValTree::from_scalar_int(scalar_int);
+
+        // 4. 创建常量（显式指定类型为 f64）
+        Const::new_value(
+            self.tcx,
+            val_tree,
+            self.tcx.types.f64, // 确保类型系统识别为 f64
+        )
     }
 
     fn mk_const_int(&self, data: u64) -> Const<'tcx> {
-        let const_arg = Const::from_usize(self.tcx, data);
+        let const_arg = Const::from_target_usize(self.tcx, data);
         const_arg
     }
 
     fn mk_const_str(&self, str: &str) -> Const<'tcx> {
         let str_ty = self.mk_str_ty();
+        let bytes = str.as_bytes();
 
-        let allocation = Allocation::from_bytes_byte_aligned_immutable(str.as_bytes());
-        // let val = ConstKind::Value(
-        //   ConstValue::Slice {
-        //     data: self.tcx.intern_const_alloc(allocation),
-        //     start: 0,
-        //     end: str.len(),
-        //   }
-        // );
+        // 在tcx的arena中分配ValTree切片
+        let elements = self.tcx.arena.alloc_from_iter(bytes.iter().map(|&byte| {
+            let scalar = ScalarInt::try_from_uint(byte as u128, Size::from_bytes(1))
+                .expect("Byte exceeds u8 range");
+            ValTree::Leaf(scalar)
+        }));
 
-        let val = ConstValue::Slice {
-            data: self.tcx.intern_const_alloc(allocation),
-            start: 0,
-            end: str.len(),
-        };
-
-        Const::from_value(self.tcx, val, str_ty)
+        let val_tree = ValTree::Branch(elements);
+        let const_kind = ConstKind::Value(str_ty, val_tree);
+        Const::new(self.tcx, const_kind)
     }
 
     fn mk_const_bool(&self, flag: bool) -> Const<'tcx> {
@@ -270,14 +314,8 @@ impl<'tcx> MirVisitor<'tcx> {
     }
 
     fn mk_str_ty(&self) -> Ty<'tcx> {
-        let region = self.tcx.mk_region(RegionKind::ReErased);
-        self.tcx.mk_ref(
-            region,
-            TypeAndMut {
-                ty: self.tcx.types.str_,
-                mutbl: Mutability::Not,
-            },
-        )
+        let region = Region::new_from_kind(self.tcx, RegionKind::ReErased);
+        Ty::new_ref(self.tcx, region, self.tcx.types.str_, Mutability::Not)
     }
 
     fn mk_move_operand(&self, local: Local) -> Operand<'tcx> {
@@ -325,14 +363,14 @@ impl<'tcx> MirVisitor<'tcx> {
         let to_place = self.mk_place(to.index());
         let u64_ty = self.tcx.types.u64;
 
-        let rvalue = Rvalue::Cast(CastKind::Misc, operand, u64_ty);
+        let rvalue = Rvalue::Cast(CastKind::Transmute, operand, u64_ty);
         self.mk_assign_stmt(to_place, rvalue)
     }
 
     fn mk_cast_local_as_u64_stmt(&self, from: Local, to: Local) -> Statement<'tcx> {
         let to_place = self.mk_place(to.index());
         let u64_ty = self.tcx.types.u64;
-        let rvalue = Rvalue::Cast(CastKind::Misc, self.mk_move_operand(from), u64_ty);
+        let rvalue = Rvalue::Cast(CastKind::Transmute, self.mk_move_operand(from), u64_ty);
         self.mk_assign_stmt(to_place, rvalue)
     }
 
@@ -349,7 +387,7 @@ impl<'tcx> MirVisitor<'tcx> {
         let to_place = self.mk_place(to.index());
         let f64_ty = self.tcx.types.f64;
 
-        let rvalue = Rvalue::Cast(CastKind::Misc, self.mk_move_operand(from), f64_ty);
+        let rvalue = Rvalue::Cast(CastKind::Transmute, self.mk_move_operand(from), f64_ty);
         self.mk_assign_stmt(to_place, rvalue)
     }
 
@@ -357,7 +395,7 @@ impl<'tcx> MirVisitor<'tcx> {
         let to_place = self.mk_place(to.index());
         let f64_ty = self.tcx.types.f64;
 
-        let rvalue = Rvalue::Cast(CastKind::Misc, operand, f64_ty);
+        let rvalue = Rvalue::Cast(CastKind::Transmute, operand, f64_ty);
         self.mk_assign_stmt(to_place, rvalue)
     }
 
@@ -381,51 +419,60 @@ impl<'tcx> MirVisitor<'tcx> {
     }
 
     fn mk_const_int_operand(&self, data: u64) -> Operand<'tcx> {
-        Operand::Constant(Box::new(Constant {
+        Operand::Constant(Box::new(ConstOperand {
             span: Default::default(),
             user_ty: None,
-            literal: ConstantKind::Ty(self.mk_const_int(data)),
+            const_: rustc_middle::mir::Const::from_usize(self.tcx, data),
         }))
     }
 
     fn mk_const_f64_operand(&self, value: f64) -> Operand<'tcx> {
-        Operand::Constant(Box::new(Constant {
+        Operand::Constant(Box::new(ConstOperand {
             span: Default::default(),
             user_ty: None,
-            literal: ConstantKind::Ty(self.mk_const_f64(value)),
+            const_: rustc_middle::mir::Const::Ty(
+                Ty::new_float(self.tcx, FloatTy::F64),
+                self.mk_const_f64(value),
+            ),
         }))
     }
 
     fn mk_const_str_operand(&self, str: &str) -> Operand<'tcx> {
-        Operand::Constant(Box::new(Constant {
+        Operand::Constant(Box::new(ConstOperand {
             span: Default::default(),
             user_ty: None,
-            literal: ConstantKind::Ty(self.mk_const_str(str)),
+            const_: rustc_middle::mir::Const::Ty(
+                Ty::new(self.tcx, TyKind::Str),
+                self.mk_const_str(str),
+            ),
         }))
     }
 
     fn mk_const_bool_operand(&self, flag: bool) -> Operand<'tcx> {
-        Operand::Constant(Box::new(Constant {
+        Operand::Constant(Box::new(ConstOperand {
             span: Default::default(),
             user_ty: None,
-            literal: ConstantKind::Ty(self.mk_const_bool(flag)),
+            const_: rustc_middle::mir::Const::Ty(
+                Ty::new(self.tcx, TyKind::Bool),
+                self.mk_const_bool(flag),
+            ),
         }))
     }
 
     fn mk_const_operand(&self, ty: Ty<'tcx>, val: ConstKind<'tcx>) -> Operand<'tcx> {
-        let const_s = ConstS { ty, val };
+        let const_s = rustc_middle::ty::Const::new(self.tcx, val);
 
-        Operand::Constant(Box::new(Constant {
+        Operand::Constant(Box::new(ConstOperand {
             span: Default::default(),
             user_ty: None,
-            literal: ConstantKind::Ty(self.tcx.mk_const(const_s)),
+            const_: rustc_middle::mir::Const::Ty(ty, const_s),
         }))
     }
 
     fn mk_resume_terminator(&mut self) -> Terminator<'tcx> {
         let terminator = Terminator {
             source_info: self.mk_dummy_source_info(),
-            kind: TerminatorKind::Resume
+            kind: TerminatorKind::UnwindResume,
         };
 
         terminator
@@ -437,26 +484,34 @@ impl<'tcx> MirVisitor<'tcx> {
         point_to: BasicBlock,
         fn_def_id: DefId,
     ) -> Terminator<'tcx> {
-        let terminator_local = self.store_local_decl(self.tcx.mk_unit());
+        let terminator_local = self.store_local_decl(Ty::new_unit(self.tcx));
         let terminator_place = self.mk_place(terminator_local.index());
 
-        let fn_ty = self.tcx.type_of(fn_def_id);
+        let fn_ty = self.tcx.type_of(fn_def_id).skip_binder();
         let func_const = Const::zero_sized(self.tcx, fn_ty);
 
-        let func_constant = Constant {
+        let func_constant = ConstOperand {
             span: Span::default(),
             user_ty: None,
-            literal: ConstantKind::Ty(func_const),
+            const_: rustc_middle::mir::Const::Ty(fn_ty, func_const),
         };
 
         let func_call = Operand::Constant(Box::new(func_constant));
 
         let terminator_kind = TerminatorKind::Call {
             func: func_call,
-            args,
-            destination: Some((terminator_place, point_to)),
-            cleanup: None,
-            from_hir_call: false,
+            args: args
+                .into_iter()
+                .map(|arg| Spanned {
+                    node: arg,
+                    span: Span::default(),
+                })
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            destination: terminator_place,
+            target: Some(point_to),
+            unwind: UnwindAction::Continue,
+            call_source: CallSource::Normal,
             fn_span: Default::default(),
         };
 
@@ -521,7 +576,7 @@ impl<'tcx> MirVisitor<'tcx> {
     }
 
     fn store_unit_local_decl(&mut self) -> Local {
-        let unit_ty = self.tcx.mk_unit();
+        let unit_ty = Ty::new_unit(self.tcx);
         self.store_local_decl(unit_ty)
     }
 
@@ -564,7 +619,7 @@ impl<'tcx> MirVisitor<'tcx> {
         is_true_branch: bool,
     ) -> (Vec<Statement<'tcx>>, Vec<Operand<'tcx>>) {
         let op_def_id = get_binary_op_def_id(&self.tcx);
-        let op_ty = self.tcx.type_of(op_def_id);
+        let op_ty = self.tcx.type_of(op_def_id).skip_binder();
         let op_enum_local = self.store_local_decl(op_ty);
         let op_def_stmt = self.mk_enum_var_stmt(op_enum_local, (*op).into());
 
@@ -714,7 +769,11 @@ impl<'tcx> MirVisitor<'tcx> {
 
                 let var_u64_local = self.store_local_decl(self.tcx.types.u64);
                 let switch_value_operand = if let Some(v) = branch_value {
-                    self.mk_const_operand(v.ty(), v.val())
+                    if let ConstKind::Value(ty, ..) = v.kind() {
+                        self.mk_const_operand(ty, v.kind())
+                    } else {
+                        self.mk_const_int_operand(0)
+                    }
                 } else {
                     self.mk_const_int_operand(0)
                 };
@@ -821,11 +880,20 @@ impl<'tcx> MirVisitor<'tcx> {
                         return match operand {
                             Operand::Copy(place) => self.get_place_definition(place),
                             Operand::Move(place) => self.get_place_definition(place),
-                            Operand::Constant(constant) => match &constant.literal {
-                                ConstantKind::Ty(c) => todo!("{:?}", c),
-                                ConstantKind::Val(const_value, ty) => {
-                                    Some(ValueDef::Const(*ty, ConstKind::Value(*const_value)))
+                            Operand::Constant(const_operand) => match &const_operand.const_ {
+                                rustc_middle::mir::Const::Ty(ty, c) => todo!("{:?}", c),
+                                rustc_middle::mir::Const::Val(const_value, ty) => {
+                                    Some(ValueDef::Const(
+                                        *ty,
+                                        ConstKind::Value(
+                                            *ty,
+                                            ValTree::from_scalar_int(
+                                                const_value.try_to_scalar_int().unwrap(),
+                                            ),
+                                        ),
+                                    ))
                                 }
+                                _ => todo!(),
                             },
                         };
                     }
@@ -852,10 +920,8 @@ impl<'tcx> MirVisitor<'tcx> {
         terminator: &Terminator<'tcx>,
     ) -> Option<ValueDef<'tcx>> {
         if let TerminatorKind::Call { destination, .. } = &terminator.kind {
-            if let Some((place, _)) = destination {
-                if place == var {
-                    return Some(ValueDef::Call);
-                }
+            if destination == var {
+                return Some(ValueDef::Call);
             }
         }
 
@@ -898,11 +964,11 @@ impl<'tcx> MirVisitor<'tcx> {
         place: &Place<'tcx>,
         output: &mut HashSet<(BasicBlock, ValueDef<'tcx>)>,
     ) {
-        let predecessors = self.body.predecessors();
+        let predecessors = self.body.basic_blocks.predecessors();
         let p = predecessors.get(block);
         if let Some(p) = p {
             for bb in p {
-                let predecessor = self.body.basic_blocks().get(*bb).unwrap();
+                let predecessor = self.body.basic_blocks.get(*bb).unwrap();
                 let value_def = predecessor
                     .statements
                     .iter()
@@ -925,19 +991,23 @@ impl<'tcx> MirVisitor<'tcx> {
             }
         }
 
-        for data in self.body.basic_blocks() {
-            let value_def = data
-                .statements
-                .iter()
-                .find_map(|stmt| self.get_place_definition_from_stmt(place, stmt));
+        let basic_blocks = self.body.basic_blocks.reverse_postorder();
+        for basic_block in basic_blocks.iter() {
+            let data = self.body.basic_blocks.get(*basic_block);
+            if let Some(data) = data {
+                let value_def = data
+                    .statements
+                    .iter()
+                    .find_map(|stmt| self.get_place_definition_from_stmt(place, stmt));
 
-            if value_def.is_some() {
-                return value_def;
-            }
+                if value_def.is_some() {
+                    return value_def;
+                }
 
-            if let Some(terminator) = &data.terminator {
-                let value_def = self.get_place_definition_from_terminator(place, terminator);
-                return value_def;
+                if let Some(terminator) = &data.terminator {
+                    let value_def = self.get_place_definition_from_terminator(place, terminator);
+                    return value_def;
+                }
             }
         }
 
@@ -967,37 +1037,36 @@ impl<'tcx> MirVisitor<'tcx> {
                             *target = *target + 1;
                         }
                     }
-                    TerminatorKind::Resume => {}
-                    TerminatorKind::Abort => {}
                     TerminatorKind::Return => {}
                     TerminatorKind::Unreachable => {}
                     TerminatorKind::Drop { target, unwind, .. } => {
                         *target = *target + 1;
-                        *unwind = unwind.map(|u| u + 1);
-                    }
-                    TerminatorKind::DropAndReplace { target, unwind, .. } => {
-                        *target = *target + 1;
-                        *unwind = unwind.map(|u| u + 1);
+                        if let UnwindAction::Cleanup(cleanup) = unwind {
+                            *cleanup = *cleanup + 1;
+                        }
                     }
                     TerminatorKind::Call {
                         destination,
-                        cleanup,
+                        target,
+                        unwind,
                         ..
                     } => {
-                        *destination = destination.map(|(place, bb)| (place, bb + 1));
-                        *cleanup = cleanup.map(|c| c + 1);
+                        // *destination = destination.map(|(place, bb)| (place, bb + 1));
+                        *target = target.map(|b| b + 1);
+                        if let UnwindAction::Cleanup(cleanup) = unwind {
+                            *cleanup = *cleanup + 1;
+                        }
                     }
-                    TerminatorKind::Assert {
-                        target, cleanup, ..
-                    } => {
+                    TerminatorKind::Assert { target, unwind, .. } => {
                         *target = *target + 1;
-                        *cleanup = cleanup.map(|c| c + 1);
+                        if let UnwindAction::Cleanup(cleanup) = unwind {
+                            *cleanup = *cleanup + 1;
+                        }
                     }
                     TerminatorKind::Yield { resume, drop, .. } => {
                         *resume = *resume + 1;
                         *drop = drop.map(|d| d + 1);
                     }
-                    TerminatorKind::GeneratorDrop => {}
                     TerminatorKind::FalseEdge {
                         real_target,
                         imaginary_target,
@@ -1010,16 +1079,22 @@ impl<'tcx> MirVisitor<'tcx> {
                         unwind,
                     } => {
                         *real_target = *real_target + 1;
-                        *unwind = unwind.map(|u| u + 1);
+                        if let UnwindAction::Cleanup(cleanup) = unwind {
+                            *cleanup = *cleanup + 1;
+                        }
                     }
                     TerminatorKind::InlineAsm {
-                        destination,
-                        cleanup,
-                        ..
+                        targets, unwind, ..
                     } => {
-                        *destination = destination.map(|d| d + 1);
-                        *cleanup = cleanup.map(|c| c + 1);
+                        // *targets = targets.into_iter().map(|d| *d + 1).collect::<Vec<_>>();
+                        for target in targets.iter_mut() {
+                            *target = *target + 1;
+                        }
+                        if let UnwindAction::Cleanup(cleanup) = unwind {
+                            *cleanup = *cleanup + 1;
+                        }
                     }
+                    _ => todo!(),
                 }
             }
         }
@@ -1065,7 +1140,8 @@ impl<'tcx> MirVisitor<'tcx> {
         target: &mut BasicBlock,
         cleanup: &mut Option<BasicBlock>,
     ) {
-        let cond_place = self.get_place(cond)
+        let cond_place = self
+            .get_place(cond)
             .expect("Place has been defined in a previous block");
         let cond_def = self.get_place_definition(cond_place);
         if let Some(cond_def) = cond_def {
@@ -1078,12 +1154,17 @@ impl<'tcx> MirVisitor<'tcx> {
                 branch_ids.push(cleanup_index);
             };
 
-
             let mut values = HashMap::new();
             // true
-            values.insert(target.as_u32() as u64, self.switch_value_to_const(self.tcx.types.bool, 1));
+            values.insert(
+                target.as_u32() as u64,
+                self.switch_value_to_const(self.tcx.types.bool, 1),
+            );
             // false
-            values.insert(target.as_u32() as u64, self.switch_value_to_const(self.tcx.types.bool, 0));
+            values.insert(
+                target.as_u32() as u64,
+                self.switch_value_to_const(self.tcx.types.bool, 0),
+            );
 
             // let mut false_tracing_chain = self.mk_tracing_chain(
             //     &cond_def,
@@ -1102,17 +1183,10 @@ impl<'tcx> MirVisitor<'tcx> {
             //     self.basic_blocks_num += 1;
             // }
 
-            let true_tracing_chain = self.mk_tracing_chain(
-                &cond_def,
-                &branch_ids,
-                true,
-                &values,
-                *target
-            );
+            let true_tracing_chain =
+                self.mk_tracing_chain(&cond_def, &branch_ids, true, &values, *target);
             *target = true_tracing_chain.0;
-            let mut instrumentation = vec![
-                true_tracing_chain
-            ];
+            let mut instrumentation = vec![true_tracing_chain];
             self.instrumentation.append(&mut instrumentation);
             //let resume = self.mk_resume_basic_block(vec![]);
 
@@ -1127,11 +1201,7 @@ impl<'tcx> MirVisitor<'tcx> {
     ) {
         info!("MIR: Instrument switch int");
         let mut instrumentation = match &mut terminator.kind {
-            TerminatorKind::SwitchInt {
-                discr,
-                switch_ty,
-                targets,
-            } => {
+            TerminatorKind::SwitchInt { discr, targets } => {
                 let switch_operand_place = self
                     .get_place(discr)
                     .expect("Place has been defined in a previous block");
@@ -1155,20 +1225,21 @@ impl<'tcx> MirVisitor<'tcx> {
                     .collect::<Vec<_>>();
                 all_targets.push((None, *targets.all_targets().last().unwrap()));
 
+                let switch_ty = discr.constant().unwrap().ty();
                 let values_const = all_targets
                     .iter()
                     .map(|(value, target)| (target, value.unwrap_or_else(|| 0)))
                     .map(|(target, value)| {
                         (
                             target.as_u32() as u64,
-                            self.switch_value_to_const(*switch_ty, value),
+                            self.switch_value_to_const(switch_ty, value),
                         )
                     })
                     .collect::<HashMap<_, _>>();
                 // Switch value is like false (0), or some numeric value, e.g., when comparing x == 2
                 for (idx, (switch_value, target_block)) in all_targets.iter().enumerate() {
                     let switch_value_const =
-                        switch_value.map(|sv| self.switch_value_to_const(*switch_ty, sv));
+                        switch_value.map(|sv| self.switch_value_to_const(switch_ty, sv));
                     let (first_tracing_block, tracing_chain) = self.mk_tracing_chain(
                         &switch_operand_def,
                         &branch_ids,
@@ -1302,10 +1373,10 @@ impl<'tcx> MirVisitor<'tcx> {
     fn mk_stmt_distance_for_const(
         &mut self,
         stmts: &mut Vec<Statement<'tcx>>,
-        constant: &Box<Constant>,
+        constant: &Box<ConstOperand>,
         alias: Option<(Local, Local)>,
     ) {
-        let ty = constant.literal.ty();
+        let ty = constant.const_.ty();
 
         let (true_branch, false_branch) = alias.unwrap_or_else(|| {
             (
@@ -1393,13 +1464,14 @@ impl<'tcx> MutVisitor<'tcx> for MirVisitor<'tcx> {
                 }
                 TerminatorKind::Call {
                     destination,
-                    cleanup,
+                    unwind,
+                    target,
                     ..
                 } => {
-                    if cleanup.is_some() {
+                    if let UnwindAction::Cleanup(_) = unwind {
                         self.branch_counter += 2
                     }
-                    if let Some((_, block)) = destination {
+                    if let Some(block) = target {
                         self.instrument_block(block);
                     }
                 }
@@ -1407,23 +1479,21 @@ impl<'tcx> MutVisitor<'tcx> for MirVisitor<'tcx> {
                     self.instrument_block(target);
                 }
                 TerminatorKind::Drop { target, unwind, .. } => {
-                    if unwind.is_some() {
-                        self.branch_counter += 2;
-                    }
-                    self.instrument_block(target);
-                }
-                TerminatorKind::DropAndReplace { target, unwind, .. } => {
-                    if unwind.is_some() {
+                    if let UnwindAction::Cleanup(_) = unwind {
                         self.branch_counter += 2;
                     }
                     self.instrument_block(target);
                 }
                 TerminatorKind::Assert {
-                    cond, expected, msg, target, cleanup,
+                    cond,
+                    expected,
+                    msg,
+                    target,
+                    unwind,
                 } => {
                     //self.instrument_assert(cond, *expected, target, cleanup);
                     self.assertions += 1;
-                    if let Some(cleanup) = cleanup {
+                    if let UnwindAction::Cleanup(cleanup) = unwind {
                         self.branch_counter += 2;
                         self.instrument_block(cleanup);
                     }
@@ -1442,7 +1512,7 @@ impl<'tcx> MutVisitor<'tcx> for MirVisitor<'tcx> {
                     real_target,
                     unwind,
                 } => {
-                    if unwind.is_some() {
+                    if let UnwindAction::Cleanup(_) = unwind {
                         self.branch_counter += 1;
                     }
                     self.instrument_block(real_target);
@@ -1455,10 +1525,10 @@ impl<'tcx> MutVisitor<'tcx> for MirVisitor<'tcx> {
     }
 
     #[cfg(feature = "analysis")]
-    fn visit_constant(&mut self, constant: &mut Constant<'tcx>, location: Location) {
-        let literal = &constant.literal;
+    fn visit_const_operand(&mut self, constant: &mut ConstOperand<'tcx>, location: Location) {
+        let literal = &constant.const_;
         match literal {
-            ConstantKind::Val(value, ty) => match value {
+            rustc_middle::mir::Const::Val(value, ty) => match value {
                 ConstValue::Scalar(scalar) => {
                     if ty.is_numeric() {
                         let value = scalar.to_string();
@@ -1467,10 +1537,10 @@ impl<'tcx> MutVisitor<'tcx> for MirVisitor<'tcx> {
                         self.constant_pool.push(RuConstVal::new(value, t));
                     }
                 }
-                ConstValue::Slice { data, start, end } => {
+                ConstValue::Slice { data, meta } => {
                     let bytes = data
                         .inner()
-                        .inspect_with_uninit_and_ptr_outside_interpreter(*start..*end);
+                        .inspect_with_uninit_and_ptr_outside_interpreter(0..*meta as usize);
                     let string = String::from_utf8_lossy(bytes);
                     debug!(
                         "Constant string: {}, is string: {}",
@@ -1480,7 +1550,7 @@ impl<'tcx> MutVisitor<'tcx> for MirVisitor<'tcx> {
                     self.constant_pool
                         .push(RuConstVal::new(string.to_string(), RuTy::Prim(RuPrim::Str)));
                 }
-                ConstValue::ByRef { .. } => {  },
+                _ => {}
             },
             _ => {}
         }
@@ -1489,17 +1559,18 @@ impl<'tcx> MutVisitor<'tcx> for MirVisitor<'tcx> {
     #[cfg(feature = "analysis")]
     fn visit_terminator(&mut self, terminator: &mut Terminator<'tcx>, location: Location) {
         match &terminator.kind {
-            TerminatorKind::SwitchInt {
-                switch_ty, targets, ..
-            } => {
-                if switch_ty.is_integral() {
-                    let ty_name = ty_name(*switch_ty);
-                    let t = <RuTy as From<String>>::from(format!("{}", ty_name));
-                    for (val, _) in targets.iter() {
-                        let value = val.to_string();
-                        self.constant_pool
-                            .push(RuConstVal::new(value.clone(), t.clone()));
-                        debug!("Constant number {:?} of type {}", value, t);
+            TerminatorKind::SwitchInt { discr, targets } => {
+                if let Some(const_operand) = discr.constant() {
+                    let switch_ty = const_operand.ty();
+                    if switch_ty.is_integral() {
+                        let ty_name = ty_name(switch_ty);
+                        let t = <RuTy as From<String>>::from(format!("{}", ty_name));
+                        for (val, _) in targets.iter() {
+                            let value = val.to_string();
+                            self.constant_pool
+                                .push(RuConstVal::new(value.clone(), t.clone()));
+                            debug!("Constant number {:?} of type {}", value, t);
+                        }
                     }
                 }
             }
@@ -1516,9 +1587,11 @@ fn find_monitor_fn_by_name(tcx: &TyCtxt<'_>, name: &str) -> DefId {
     tcx.hir()
         .items()
         .find_map(|i| {
-            if let ItemKind::Fn(_, _, _) = &i.kind {
-                if i.ident.name.to_string().contains(name) {
-                    return Some(i.def_id.to_def_id());
+            let item = tcx.hir().item(i);
+            if let ItemKind::Fn(_, _, _) = &item.kind {
+                if item.ident.name.to_string().contains(name) {
+                    println!("{:#?}", item.ident.name.to_string());
+                    return Some(item.owner_id.to_def_id());
                 }
             }
             None
@@ -1590,7 +1663,7 @@ fn find_trace_branch_hit_fn(tcx: &TyCtxt<'_>) -> DefId {
     find_monitor_fn_by_name(tcx, "trace_branch_hit")
 }
 
-fn is_rusty_monitor(hir_id: HirId, tcx: &TyCtxt<'_>) -> bool {
+pub fn is_rusty_monitor(hir_id: HirId, tcx: &TyCtxt<'_>) -> bool {
     let name = format!("{:?}", hir_id);
     name.contains("rusty_monitor")
 }
@@ -1599,9 +1672,10 @@ fn get_binary_op_def_id(tcx: &TyCtxt<'_>) -> DefId {
     tcx.hir()
         .items()
         .find_map(|i| {
-            if let ItemKind::Enum(_, _) = &i.kind {
-                if i.ident.name.to_string() == "BinaryOp" {
-                    return Some(i.def_id.to_def_id());
+            let item = tcx.hir().item(i);
+            if let ItemKind::Enum(_, _) = &item.kind {
+                if item.ident.name.to_string() == "BinaryOp" {
+                    return Some(item.owner_id.to_def_id());
                 }
             }
             Option::None
@@ -1611,22 +1685,23 @@ fn get_binary_op_def_id(tcx: &TyCtxt<'_>) -> DefId {
 
 fn to_binary_op(op: &BinOp) -> BinaryOp {
     match op {
-        BinOp::Add => BinaryOp::Add,
-        BinOp::Sub => BinaryOp::Sub,
-        BinOp::Mul => BinaryOp::Mul,
+        BinOp::Add | BinOp::AddUnchecked | BinOp::AddWithOverflow => BinaryOp::Add,
+        BinOp::Sub | BinOp::SubUnchecked | BinOp::SubWithOverflow => BinaryOp::Sub,
+        BinOp::Mul | BinOp::MulUnchecked | BinOp::MulWithOverflow => BinaryOp::Mul,
         BinOp::Div => BinaryOp::Div,
         BinOp::Rem => BinaryOp::Rem,
         BinOp::BitXor => BinaryOp::BitXor,
         BinOp::BitAnd => BinaryOp::BitAnd,
         BinOp::BitOr => BinaryOp::BitOr,
-        BinOp::Shl => BinaryOp::Shl,
-        BinOp::Shr => BinaryOp::Shr,
+        BinOp::Shl | BinOp::ShlUnchecked => BinaryOp::Shl,
+        BinOp::Shr | BinOp::ShrUnchecked => BinaryOp::Shr,
         BinOp::Eq => BinaryOp::Eq,
         BinOp::Lt => BinaryOp::Lt,
         BinOp::Le => BinaryOp::Le,
         BinOp::Ne => BinaryOp::Ne,
         BinOp::Ge => BinaryOp::Ge,
         BinOp::Gt => BinaryOp::Gt,
+        BinOp::Cmp => todo!(),
         BinOp::Offset => BinaryOp::Offset,
     }
 }
@@ -1635,6 +1710,7 @@ fn to_unary_op(op: &UnOp) -> UnaryOp {
     match op {
         UnOp::Not => UnaryOp::Not,
         UnOp::Neg => UnaryOp::Neg,
+        UnOp::PtrMetadata => todo!(),
     }
 }
 
@@ -1703,15 +1779,19 @@ impl<'a> ValueDef<'a> {
     fn from_operand(operand: &Operand<'a>, ty: Ty<'a>) -> ValueDef<'a> {
         match operand {
             Operand::Copy(place) | Operand::Move(place) => ValueDef::Var(*place, ty),
-            Operand::Constant(constant) => match &constant.literal {
-                ConstantKind::Ty(constant_ty) => {
-                    let ty = constant_ty.ty();
-                    let val = constant_ty.val();
-                    ValueDef::Const(ty, val)
+            Operand::Constant(const_operand) => match &const_operand.const_ {
+                rustc_middle::mir::Const::Ty(ty, constant_ty) => {
+                    let val = constant_ty.kind();
+                    ValueDef::Const(*ty, val)
                 }
-                ConstantKind::Val(const_value, ty) => {
-                    ValueDef::Const(*ty, ConstKind::Value(*const_value))
-                }
+                rustc_middle::mir::Const::Val(const_value, ty) => ValueDef::Const(
+                    *ty,
+                    ConstKind::Value(
+                        *ty,
+                        ValTree::from_scalar_int(const_value.try_to_scalar_int().unwrap()),
+                    ),
+                ),
+                _ => todo!(),
             },
         }
     }

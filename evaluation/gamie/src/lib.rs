@@ -1,11 +1,9 @@
-
-#![feature(no_coverage)]
+#![feature(coverage_attribute)]
 
 #[cfg_attr(not(feature = "std"), no_std)]
 #[allow(unused_imports)]
 #[cfg(feature = "connect_four")]
 pub mod connect_four;
-
 
 #[cfg(feature = "gomoku")]
 pub mod gomoku;
@@ -17,7 +15,7 @@ pub mod minesweeper;
 pub mod reversi;
 
 #[cfg(feature = "tictactoe")]
-#[feature(no_coverage)]
+#[feature(coverage_attribute)]
 pub mod tictactoe;
 
 #[cfg(feature = "std")]
