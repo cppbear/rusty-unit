@@ -306,5 +306,5 @@ code-analysis/**
 **/*.log.gz
 
 ./evaluation/**
-**/bin/*
+#**/bin/*
 *.class
