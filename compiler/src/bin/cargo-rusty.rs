@@ -18,7 +18,10 @@ fn show_help() {
 }
 
 fn show_version() {
-    println!("rust-rusty {}", env!("CARGO_PKG_VERSION"));
+    Command::new("rustc")
+        .arg("--version")
+        .status()
+        .expect("Failed to get rustc version");
 }
 
 fn show_error(msg: String) -> ! {
@@ -136,7 +139,7 @@ fn main() {
         show_help();
         return;
     }
-    if std::env::args().any(|a| a == "--version" || a == "-V") {
+    if std::env::args().any(|a| a == "--version" || a == "-v") {
         show_version();
         return;
     }
