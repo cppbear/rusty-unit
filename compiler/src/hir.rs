@@ -36,6 +36,8 @@ pub fn hir_analysis(tcx: TyCtxt<'_>) {
     //   return;
     // }
 
+    println!("Hir analysis for crate: {}", current_crate_name);
+
     let mut callables = vec![];
     for i in tcx.hir().items() {
         let item = tcx.hir().item(i);
@@ -62,6 +64,8 @@ pub fn hir_analysis(tcx: TyCtxt<'_>) {
                 }
             }
         }
+
+        println!("Hir analysis for span: {:?}", span);
 
         match &item.kind {
             ItemKind::Fn(sig, generics, body_id) => {
@@ -337,7 +341,7 @@ fn analyze_struct(
                 if let Some(generics) = generics {
                     let self_ty =
                         RuTy::Struct(RuStruct::new(&self_name, generics, is_local(def_id)));
-                    if self_name.contains("serde") {
+                    if self_name.contains("serde") || self_name.contains("Buffer") {
                         // Skip too hard stuff
                         return;
                     }

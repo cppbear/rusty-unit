@@ -5,7 +5,7 @@ use crate::mir::ValueDef::Var;
 use crate::monitor::{BinaryOp, UnaryOp};
 use crate::rustc_middle::ty::inherent::Ty as NTy;
 use crate::types::{ty_name, RuConstVal, RuPrim, RuTy};
-use crate::utils::{ty_to_name, ty_to_t, tys_to_t};
+use crate::utils::{ty_to_name, ty_to_t, tys_to_t, span_to_path};
 #[cfg(feature = "analysis")]
 use crate::writer::{MirObject, MirObjectBuilder, MirWriter};
 use crate::{RuConfig, DOT_DIR, INSTRUMENTED_MIR_LOG_NAME, LOG_DIR};
@@ -64,6 +64,24 @@ pub const CUSTOM_OPT_MIR: for<'tcx> fn(_: TyCtxt<'tcx>, _: LocalDefId) -> &'tcx 
         let crate_name = tcx.crate_name(def_id.krate);
         let hir_id = tcx.local_def_id_to_hir_id(local_def_id);
         let body_ref = tcx.arena.alloc(body);
+
+        let file_path = span_to_path(&tcx.def_span(def_id), &tcx);
+        if file_path.is_none() {
+            return body_ref;
+        }
+
+        info!("MIR: Scanning file {:?}", file_path.as_ref());
+        if let Some(path) = file_path.as_ref() {
+            if path.ends_with("rusty_monitor.rs") {
+                return body_ref;
+            }
+
+            if let Some(path) = path.to_str() {
+                if path.contains(".cargo") {
+                    return body_ref;
+                }
+            }
+        }
 
         if crate_name.as_str() != RuConfig::env_crate_name()
             || is_rusty_monitor(hir_id, &tcx)
@@ -1225,7 +1243,7 @@ impl<'tcx> MirVisitor<'tcx> {
                     .collect::<Vec<_>>();
                 all_targets.push((None, *targets.all_targets().last().unwrap()));
 
-                let switch_ty = discr.constant().unwrap().ty();
+                let switch_ty = discr.ty(self.body.local_decls(), self.tcx);
                 let values_const = all_targets
                     .iter()
                     .map(|(value, target)| (target, value.unwrap_or_else(|| 0)))
