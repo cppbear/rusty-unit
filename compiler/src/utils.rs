@@ -235,7 +235,8 @@ pub fn path_to_t(
             // }
         }
         _ => {
-            unimplemented!("{:?}", &path.res)
+            // unimplemented!("{:?}", &path.res)
+            None
         }
     }
 }

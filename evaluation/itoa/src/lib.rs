@@ -42,7 +42,7 @@
     clippy::unreadable_literal
 )]
 pub use ntest::timeout;
-#[path = "./monitor.rs"]
+// #[path = "./monitor.rs"]
 pub mod rusty_monitor;
 mod udiv128;
 
