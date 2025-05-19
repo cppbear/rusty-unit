@@ -16,6 +16,7 @@ use rustc_session::config::ErrorOutputType;
 use rustc_session::EarlyDiagCtxt;
 use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 use std::env;
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process;
 use time::UtcOffset;
@@ -81,7 +82,12 @@ fn main() {
             // let analysis_options = option::AnalysisOption::from_args(&mut rustc_args);
             // info!("Analysis Option: {:?}", analysis_options);
 
-            let env = env::var_os("RBRINFO_CRATE_DIR").unwrap();
+            let env = env::var_os("RBRINFO_CRATE_DIR");
+            let env = if let Some(env) = env {
+                env
+            } else {
+                OsString::new()
+            };
             let crate_dir = PathBuf::from(env);
             info!("Crate directory: {:?}", crate_dir);
 

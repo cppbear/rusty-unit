@@ -1,0 +1,10 @@
+error: failed to run `rustc` to learn about target-specific information
+
+Caused by:
+  process didn't exit successfully: `/home/abezbm/.cargo/bin/instrumentation /home/abezbm/.rustup/toolchains/nightly-2024-07-21-x86_64-unknown-linux-gnu/bin/rustc - --crate-name ___ --print=file-names --crate-type bin --crate-type rlib --crate-type dylib --crate-type cdylib --crate-type staticlib --crate-type proc-macro --print=sysroot --print=split-debuginfo --print=crate-name --print=cfg` (exit status: 1)
+  --- stdout
+  14:30:46 [INFO] [src/bin/rusty.rs:92] Crate directory: ""
+
+  --- stderr
+  error: multiple input filenames provided (first two filenames are `/home/abezbm/.rustup/toolchains/nightly-2024-07-21-x86_64-unknown-linux-gnu/bin/rustc` and `-`)
+
