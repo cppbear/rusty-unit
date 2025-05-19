@@ -121,9 +121,8 @@ public class DynaMOSA<C extends AbstractTestCaseChromosome<C>> implements Geneti
       onPopulation(gen, archive.get());
     }
 
-    var averageLength =
-        ((double) archive.get().stream().map(AbstractTestCaseChromosome::size).reduce(Integer::sum)
-            .get()) / archive.size();
+    var averageLength = ((double) archive.get().stream().map(AbstractTestCaseChromosome::size).reduce(Integer::sum)
+        .get()) / archive.size();
 
     System.out.printf("Number of tests: %d, average length: %.2f%n", archive.size(), averageLength);
 

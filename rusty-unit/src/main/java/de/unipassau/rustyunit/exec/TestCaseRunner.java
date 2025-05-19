@@ -160,21 +160,37 @@ public class TestCaseRunner implements ChromosomeExecutor<TestCase> {
       throws IOException, InterruptedException, TestCaseDoesNotCompileException {
     var timer = new Timer();
     timer.start();
-    var processBuilder = new ProcessBuilder("cargo", "test",
-        Constants.TEST_MOD_NAME, "--features", features)
+    var processBuilder = new ProcessBuilder("cargo", "instrumentation", "--features", features)
         .directory(directory)
         .redirectError(errorPath.toFile());
 
     var env = processBuilder.environment();
-    env.put("RUSTC_WRAPPER", instrumenter.toString());
+    // env.put("RUSTC_WRAPPER", instrumenter.toString());
     env.put("RUST_LOG", "info");
     env.put("RU_STAGE", "instrumentation");
     env.put("RU_CRATE_NAME", crateName);
     env.put("RU_CRATE_ROOT", directory.toString());
     env.put("RU_RUN", String.valueOf(run));
     var process = processBuilder.start();
-    var output = IOUtils.toString(process.getInputStream(), Charset.defaultCharset());
-    var statusCode = process.waitFor();
+    // var output = IOUtils.toString(process.getInputStream(),
+    // Charset.defaultCharset());
+    // var statusCode = process.waitFor();
+
+    var processBuilder2 = new ProcessBuilder("cargo", "test",
+        Constants.TEST_MOD_NAME, "--features", features)
+        .directory(directory)
+        .redirectError(errorPath.toFile());
+
+    var env2 = processBuilder2.environment();
+    // env.put("RUSTC_WRAPPER", instrumenter.toString());
+    env2.put("RUST_LOG", "info");
+    env2.put("RU_STAGE", "instrumentation");
+    env2.put("RU_CRATE_NAME", crateName);
+    env2.put("RU_CRATE_ROOT", directory.toString());
+    env2.put("RU_RUN", String.valueOf(run));
+    var process2 = processBuilder2.start();
+    var output = IOUtils.toString(process2.getInputStream(), Charset.defaultCharset());
+    var statusCode = process2.waitFor();
 
     var path = Paths.get(directory.getAbsolutePath(), "build", System.currentTimeMillis() + ".log");
     path.getParent().toFile().mkdirs();

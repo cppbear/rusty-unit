@@ -75,7 +75,7 @@ public class RandomSearch<C extends AbstractTestCaseChromosome<C>> implements Ge
         container.addAll(population);
         status = container.execute();
         if (status == Status.COMPILATION_ERROR) {
-          //throw new RuntimeException("Not implemented");
+          // throw new RuntimeException("Not implemented");
           System.out.println("Failed, restart...");
           pb.setExtraMessage(barStatus("Broken, recovering..."));
           continue;

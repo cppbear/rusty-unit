@@ -144,7 +144,9 @@ fn main() {
         return;
     }
 
-    if let Some("rusty") = std::env::args().nth(1).as_ref().map(AsRef::as_ref) {
+    if let Some("rusty") | Some("instrumentation") =
+        std::env::args().nth(1).as_ref().map(AsRef::as_ref)
+    {
         // This arm is for when `cargo rbrinfo` is called. We call `cargo rustc` for each applicable target,
         // but with the `RUSTC` env var set to the `cargo-rbrinfo` binary so that we come back in the other branch,
         // and dispatch the invocations to `rustc` and `rbrinfo`, respectively.

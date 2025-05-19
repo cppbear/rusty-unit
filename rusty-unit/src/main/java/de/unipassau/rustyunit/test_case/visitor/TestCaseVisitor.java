@@ -63,8 +63,9 @@ public class TestCaseVisitor implements Visitor {
 
   @Override
   public String visitTestCase(TestCase testCase) {
-    var sb = new StringBuilder("#[no_coverage]\n");
-    sb.append("#[test]\n");
+    // var sb = new StringBuilder("#[no_coverage]\n");
+    var sb = new StringBuilder("#[test]\n");
+    // sb.append("#[test]\n");
     sb.append("#[should_panic]\n");
     sb.append("#[timeout(").append(Constants.TEST_TIMEOUT).append(")]\n");
     sb.append("fn ").append(testCase.getName()).append("() {\n");
@@ -110,9 +111,9 @@ public class TestCaseVisitor implements Visitor {
       if (callableStmt.parent().isPresent()) {
         var parentType = callableStmt.parent().get();
         if (callableStmt.ofTrait().isPresent()) {
-//          sb.append("<").append(parentType.fullName()).append(" as ")
-//              .append(callableStmt.ofTrait().get()).append(">::");
-          //sb.append(callableStmt.ofTrait().get()).append("::");
+          // sb.append("<").append(parentType.fullName()).append(" as ")
+          // .append(callableStmt.ofTrait().get()).append(">::");
+          // sb.append(callableStmt.ofTrait().get()).append("::");
           sb.append(parentType.fullName()).append("::");
         } else {
           sb.append(parentType.fullName()).append("::");
@@ -124,8 +125,9 @@ public class TestCaseVisitor implements Visitor {
       if (!callableStmt.generics().isEmpty() && callableStmt.returnValue().isPresent()) {
         sb.append("::");
         var typeBinding = callableStmt.returnValue().get().getBinding();
-        var genericsString = callableStmt.generics().stream().map(g -> g.bindGenerics(typeBinding)).map(Type::encode).collect(
-            Collectors.joining(", "));
+        var genericsString = callableStmt.generics().stream().map(g -> g.bindGenerics(typeBinding)).map(Type::encode)
+            .collect(
+                Collectors.joining(", "));
         sb.append("<").append(genericsString).append(">");
       }
 
@@ -146,12 +148,14 @@ public class TestCaseVisitor implements Visitor {
           .append(returnType.fullName()).append(" {");
 
       var argsStr = Streams.zip(structInitStmt.params().stream(), structInitStmt.args().stream(),
-              Pair::with)
+          Pair::with)
           .map(pair -> {
             var value = getVariableName(pair.getValue1());
-            /*if (structInitStmt.borrows(pair.getValue1())) {
-              value = String.format("&%s", value);
-            }*/
+            /*
+             * if (structInitStmt.borrows(pair.getValue1())) {
+             * value = String.format("&%s", value);
+             * }
+             */
 
             return String.format("%s: %s", pair.getValue0().getName(), value);
           })
@@ -173,7 +177,7 @@ public class TestCaseVisitor implements Visitor {
       if (!enumStmt.getArgs().isEmpty()) {
         if (variant.isStruct()) {
           var argsStr = Streams.zip(variant.getParams().stream(), enumStmt.getArgs().stream(),
-                  Pair::with)
+              Pair::with)
               .map(pair -> pair.getValue0().getName() + ": " + getVariableName(pair.getValue1()))
               .collect(Collectors.joining(", "));
           sb.append(" {").append(argsStr).append("}");

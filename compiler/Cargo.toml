@@ -8,6 +8,10 @@ name = "instrumentation"
 required-features = ["instrumentation"]
 path = "src/bin/rusty.rs"
 
+[[bin]]
+name = "cargo-instrumentation"
+required-features = ["instrumentation"]
+path = "src/bin/cargo-rusty.rs"
 
 [[bin]]
 name = "analysis"

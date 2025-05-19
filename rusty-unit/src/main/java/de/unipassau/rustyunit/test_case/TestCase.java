@@ -249,7 +249,8 @@ public class TestCase extends AbstractTestCaseChromosome<TestCase> {
   }
 
   /**
-   * We assume that all the variables used in the statement do not exist in this test case, because
+   * We assume that all the variables used in the statement do not exist in this
+   * test case, because
    * the stmt comes from another one.
    */
   public List<VarReference> satisfyParameters(int pos, Statement stmt) {
@@ -448,14 +449,14 @@ public class TestCase extends AbstractTestCaseChromosome<TestCase> {
     var possibleMethods = tyCtxt.methodsOf(variables());
     if (Rnd.get().nextDouble() < P_LOCAL_VARIABLES && !possibleMethods.isEmpty()) {
       var variableAndMethod = Rnd.choice(possibleMethods);
-      //var variableAndMethod = CallableSelector.select(possibleMethods);
+      // var variableAndMethod = CallableSelector.select(possibleMethods);
       return insertMethodOnExistingVariable(variableAndMethod.getValue0(),
           variableAndMethod.getValue1(), filePathBinding.orElse(null));
     } else if (filePathBinding.isPresent()) {
-      //callable = Rnd.choice(tyCtxt.getCallables(filePathBinding.get(), true));
+      // callable = Rnd.choice(tyCtxt.getCallables(filePathBinding.get(), true));
       callable = CallableSelector.select(tyCtxt.getCallables(filePathBinding.get(), true));
     } else {
-      //callable = Rnd.choice(tyCtxt.getCallables(null, true));
+      // callable = Rnd.choice(tyCtxt.getCallables(null, true));
       callable = CallableSelector.select(tyCtxt.getCallables(null, true));
     }
 
@@ -499,7 +500,6 @@ public class TestCase extends AbstractTestCaseChromosome<TestCase> {
     logger.info("({}) Inserting a method on existing variable {}", id, owner);
     var args = new ArrayList<VarReference>(method.getParams().size());
     var selfParam = method.getSelfParam();
-
 
     LinkedHashSet<Generic> generics = TypeUtil.generics(method);
     TypeBinding ownerTypeBinding = owner.getBinding();
@@ -599,17 +599,15 @@ public class TestCase extends AbstractTestCaseChromosome<TestCase> {
     if (callable.isMethod()) {
       generics.addAll(
           Stream.concat(callable.getParent().generics().stream(),
-                  callable.asMethod().generics().stream())
+              callable.asMethod().generics().stream())
               .filter(Type::isGeneric)
               .map(Type::asGeneric)
-              .collect(Collectors.toSet())
-      );
+              .collect(Collectors.toSet()));
     } else if (callable.isStaticMethod()) {
       generics.addAll(
           callable.asStaticMethod().generics().stream().filter(Type::isGeneric).map(Type::asGeneric)
               .collect(
-                  Collectors.toSet())
-      );
+                  Collectors.toSet()));
     }
 
     if (callable.returnsValue()) {
@@ -669,12 +667,14 @@ public class TestCase extends AbstractTestCaseChromosome<TestCase> {
   }
 
   /**
-   * Either looks for an existing usable variable or creates a new variable to use as argument for
+   * Either looks for an existing usable variable or creates a new variable to use
+   * as argument for
    * the given type.
    *
-   * @param type The type to get an argument for.
-   * @param usableBeforeLine The line number the possible argument shall be usable until
-   * (exclusively).
+   * @param type             The type to get an argument for.
+   * @param usableBeforeLine The line number the possible argument shall be usable
+   *                         until
+   *                         (exclusively).
    * @return Argument if possible.
    */
   public Optional<VarReference> getArg(Type type, int usableBeforeLine, String filePathBinding) {
@@ -705,7 +705,8 @@ public class TestCase extends AbstractTestCaseChromosome<TestCase> {
   }
 
   /**
-   * A convenience method, when we need to generate an arg for a type directly instead of a generic
+   * A convenience method, when we need to generate an arg for a type directly
+   * instead of a generic
    * param
    */
   public Optional<VarReference> generateArg(Type type, String globalId, String filePathBinding) {
@@ -724,19 +725,19 @@ public class TestCase extends AbstractTestCaseChromosome<TestCase> {
     } else if (type.isRef()) {
       var reference = type.asRef();
       return generateReference(reference, typesToGenerate, filePathBinding);
-//      return generateArgFromGenerators(type, generators, typesToGenerate);
+      // return generateArgFromGenerators(type, generators, typesToGenerate);
     } else if (type.isArray()) {
       return generateArray(type.asArray(), typesToGenerate, filePathBinding);
     } else if (type.isTuple()) {
       var tuple = type.asTuple();
       return generateTuple(tuple, typesToGenerate, filePathBinding);
     } else if (type.isSlice()) {
-      //var array = generateArray(type.asSlice().type(), typesToGenerate);
-      //return array.map(a -> referenceVariable(a, true));
+      // var array = generateArray(type.asSlice().type(), typesToGenerate);
+      // return array.map(a -> referenceVariable(a, true));
       return Optional.empty();
     } else {
       return Optional.empty();
-      //throw new RuntimeException("Not implemented: " + type);
+      // throw new RuntimeException("Not implemented: " + type);
     }
   }
 
@@ -810,7 +811,7 @@ public class TestCase extends AbstractTestCaseChromosome<TestCase> {
   private Optional<VarReference> generateArray(Array array, Set<Type> typesToGenerate,
       String filePathBinding) {
     // TODO: 27.02.22 1) [T; N] where T: Default (and N <= 32)
-    // TODO: 27.02.22  [T; N] where T: Copy
+    // TODO: 27.02.22 [T; N] where T: Copy
     // TODO: 27.02.22 literal array init
     if (array.implementedTraits().contains(Default.getInstance())) {
       throw new RuntimeException("Not implemented");
@@ -994,8 +995,11 @@ public class TestCase extends AbstractTestCaseChromosome<TestCase> {
   public String getTypeBindingsString() {
     var sb = new StringBuilder();
     var visitor = new TypeBindingStringVisitor(this);
-    /*typeBindings.forEach((key, value) -> sb.append(visitor.getVariableName(key)).append(": ")
-        .append(visitor.visit(value)));*/
+    /*
+     * typeBindings.forEach((key, value) ->
+     * sb.append(visitor.getVariableName(key)).append(": ")
+     * .append(visitor.visit(value)));
+     */
     return sb.toString();
   }
 

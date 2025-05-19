@@ -92,8 +92,7 @@ public class TestsGenerator {
         preferenceSorter,
         archive,
         svd,
-        crate
-    );
+        crate);
 
     var solutions = mosa.findSolution();
 
@@ -120,11 +119,13 @@ public class TestsGenerator {
     var selection = new RankSelection<>(objectives, svd, preferenceSorter);
 
     ChromosomeGenerator<TestCase> chromosomeGenerator;
-//    if (SeedOptions.any()) {
-//      chromosomeGenerator = new SeededTestCaseGenerator(hir, mir, mutation, crossover);
-//    } else {
-//      chromosomeGenerator = new RandomTestCaseGenerator(hir, mir, mutation, crossover);
-//    }
+    // if (SeedOptions.any()) {
+    // chromosomeGenerator = new SeededTestCaseGenerator(hir, mir, mutation,
+    // crossover);
+    // } else {
+    // chromosomeGenerator = new RandomTestCaseGenerator(hir, mir, mutation,
+    // crossover);
+    // }
     chromosomeGenerator = new RandomTestCaseGenerator(hir, mir, mutation, crossover);
 
     var populationGenerator = new FixedSizePopulationGenerator<>(
@@ -162,9 +163,8 @@ public class TestsGenerator {
 
     String algorithm = SeedOptions.any() ? "seeded_dynamosa" : "dynamosa";
     List<Listener<TestCase>> listeners = List.of(
-        //new Output<>(cli.getCrateName(), cli.getCrateRoot()),
-        new DB(cli.getCrateName(), algorithm, cli.getRun())
-    );
+        // new Output<>(cli.getCrateName(), cli.getCrateRoot()),
+        new DB(cli.getCrateName(), algorithm, cli.getRun()));
 
     var dynamosa = DynaMOSA.<TestCase>builder().maxGenerations(GENERATIONS)
         .populationSize(POPULATION_SIZE)
@@ -218,8 +218,7 @@ public class TestsGenerator {
 
     String algorithm = SeedOptions.any() ? "seeded_random" : "random";
     List<Listener<TestCase>> listeners = List.of(
-        new DB(cli.getCrateName(), algorithm, cli.getRun())
-    );
+        new DB(cli.getCrateName(), algorithm, cli.getRun()));
     var archive = new DefaultArchive<>(objectives);
     var rs = RandomSearch.<TestCase>builder().samples(GENERATIONS * POPULATION_SIZE)
         .chromosomeGenerator(chromosomeGenerator)
