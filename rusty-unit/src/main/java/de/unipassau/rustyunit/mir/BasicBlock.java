@@ -45,12 +45,14 @@ public class BasicBlock implements MinimizingFitnessFunction<TestCase> {
       return cache.get(testCase.getId());
     }
     var branchDistance = testCase.branchDistance();
-
+    System.out.printf("branch_distance: %s\n", branchDistance);
     var coveredTargets = branchDistance.keySet();
     var cdg = testCase.mir().getCdgFor(globalId);
-
+    System.out.printf("cdg: %s\n", cdg);
     var path = cdg.pathTo(this);
+    System.out.printf("path: %s\n", path);
     int approachLevel = cdg.approachLevel(this, coveredTargets);
+    System.out.printf("approach_level: %s\n", approachLevel);
     Preconditions.checkState(approachLevel >= 0 && approachLevel <= path.size());
 
     double fitness;
@@ -96,6 +98,5 @@ public class BasicBlock implements MinimizingFitnessFunction<TestCase> {
   public int hashCode() {
     return Objects.hash(globalId, blockId);
   }
-
 
 }

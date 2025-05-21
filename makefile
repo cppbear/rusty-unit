@@ -29,3 +29,8 @@ bin/rusty-unit.jar :
 	mv -v ./rusty-unit/build/libs/rusty-unit.jar ./bin/rusty-unit.jar
 
 build : bin/analysis bin/instrumentation bin/rusty-unit.jar
+
+clean :
+	rm -rf ./bin/analysis
+	rm -rf ./bin/instrumentation
+	rm -rf ./bin/rusty-unit.jar

@@ -24,6 +24,7 @@ public class DefaultArchive<C extends AbstractTestCaseChromosome<C>> implements 
   private final Map<MinimizingFitnessFunction<C>, Double> fitness;
 
   private final Stats stats;
+
   public class StatsImpl implements Stats {
     @Override
     public int coveredTargets() {
@@ -55,7 +56,10 @@ public class DefaultArchive<C extends AbstractTestCaseChromosome<C>> implements 
 
   @Override
   public void update(List<C> population) {
+    logger.info("Populations: {}", population);
+    logger.info("Objects: {}", objectives);
     for (var u : objectives) {
+      // logger.info("Object: {}", u);
       C bestTestCase;
       var bestLength = Integer.MAX_VALUE;
       if ((bestTestCase = coveredObjectives.get(u)) != null) {
@@ -65,6 +69,7 @@ public class DefaultArchive<C extends AbstractTestCaseChromosome<C>> implements 
       for (var testCase : population) {
         Objects.requireNonNull(testCase);
         var score = u.getFitness(testCase);
+        // logger.info("object: {}, test_cast: {}, score: {}", u, testCase, score);
         if (score < minScore) {
           minScore = score;
         }

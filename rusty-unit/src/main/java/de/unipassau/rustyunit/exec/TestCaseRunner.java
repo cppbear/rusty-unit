@@ -172,9 +172,15 @@ public class TestCaseRunner implements ChromosomeExecutor<TestCase> {
     env.put("RU_CRATE_ROOT", directory.toString());
     env.put("RU_RUN", String.valueOf(run));
     var process = processBuilder.start();
-    // var output = IOUtils.toString(process.getInputStream(),
-    // Charset.defaultCharset());
-    // var statusCode = process.waitFor();
+    var cargo_output = IOUtils.toString(process.getErrorStream(), Charset.defaultCharset());
+    process.waitFor();
+
+    var cargologpath = Paths.get(directory.getAbsolutePath(), "build", "cargo_" + System.currentTimeMillis() + ".log");
+    cargologpath.getParent().toFile().mkdirs();
+    try (var writer = Files.newBufferedWriter(cargologpath)) {
+      writer.write(cargo_output);
+      writer.flush();
+    }
 
     var processBuilder2 = new ProcessBuilder("cargo", "test",
         Constants.TEST_MOD_NAME, "--features", features)

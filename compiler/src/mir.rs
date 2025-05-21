@@ -56,7 +56,7 @@ pub const CUSTOM_OPT_MIR: for<'tcx> fn(_: TyCtxt<'tcx>, _: LocalDefId) -> &'tcx 
     |tcx, def| {
         let local_def_id = def;
         let def_id = def.to_def_id();
-        println!("{:#?}", def_id);
+        // println!("{:#?}", def_id);
         let opt_mir = rustc_interface::DEFAULT_QUERY_PROVIDERS
             .borrow()
             .optimized_mir;
@@ -1608,7 +1608,7 @@ fn find_monitor_fn_by_name(tcx: &TyCtxt<'_>, name: &str) -> DefId {
             let item = tcx.hir().item(i);
             if let ItemKind::Fn(_, _, _) = &item.kind {
                 if item.ident.name.to_string().contains(name) {
-                    println!("{:#?}", item.ident.name.to_string());
+                    // println!("{:#?}", item.ident.name.to_string());
                     return Some(item.owner_id.to_def_id());
                 }
             }

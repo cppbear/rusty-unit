@@ -40,7 +40,8 @@ public class Slice implements Type {
 
   @Override
   public String getName() {
-    throw new RuntimeException("getName is not implemented");
+    // throw new RuntimeException("getName is not implemented");
+    return new String();
   }
 
   @Override
@@ -118,7 +119,7 @@ public class Slice implements Type {
   @Override
   public String toString() {
     throw new RuntimeException("Not implemented");
-    //return encode();
+    // return encode();
   }
 
   @Override

@@ -15,6 +15,8 @@ import de.unipassau.rustyunit.source.ChromosomeContainer;
 import de.unipassau.rustyunit.test_case.CallableSelector;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+
 import lombok.Builder;
 import me.tongfei.progressbar.ProgressBar;
 import org.slf4j.Logger;
@@ -50,6 +52,7 @@ public class DynaMOSA<C extends AbstractTestCaseChromosome<C>> implements Geneti
       do {
         container.addAll(population);
         status = container.execute();
+        // logger.info("container: {}", container);
         switch (status) {
           case COMPILATION_ERROR -> throw new RuntimeException("Not implemented");
           default -> {
@@ -131,6 +134,8 @@ public class DynaMOSA<C extends AbstractTestCaseChromosome<C>> implements Geneti
 
   private void onExecuted(int gen) {
     var coverage = archive.coverage();
+    // logger.info("Coverage: {}",
+    //     coverage);
     var status = Listener.Status.builder()
         .coveredTargets(coverage.coveredTargets())
         .coverage(coverage.coverage())

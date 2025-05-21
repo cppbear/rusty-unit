@@ -138,6 +138,10 @@ pub fn hir_analysis(tcx: TyCtxt<'_>) {
     // #[cfg(redis_writer)]
     // todo!()
 
+    if callables.is_empty() {
+        return;
+    }
+
     let hir_object: HirObject = HirObjectBuilder::default()
         .name(current_crate_name.to_ident_string())
         .callables(callables)
@@ -341,7 +345,11 @@ fn analyze_struct(
                 if let Some(generics) = generics {
                     let self_ty =
                         RuTy::Struct(RuStruct::new(&self_name, generics, is_local(def_id)));
-                    if self_name.contains("serde") || self_name.contains("Buffer") {
+                    // if self_name.contains("serde") || self_name.contains("Buffer") {
+                    //     // Skip too hard stuff
+                    //     return;
+                    // }
+                    if self_name.contains("serde") {
                         // Skip too hard stuff
                         return;
                     }
@@ -470,6 +478,7 @@ fn analyze_super_traits(
 }
 
 fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, tcx: &TyCtxt<'_>) {
+    // println!("{:#?}", im);
     let parent_def_id_opt = impl_to_def_id(im, tcx);
     if let Safety::Unsafe = im.safety {
         // Skip unsafe functions
@@ -518,17 +527,20 @@ fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, 
         info!("Created mapping: {:?}", associated_types);
 
         for item in items {
+            // println!("item");
             let item_def_id = item.id.owner_id.def_id;
             let global_id = def_id_to_str(item_def_id.to_def_id(), tcx).replace("::", "__");
 
             let hir_id = tcx.local_def_id_to_hir_id(item_def_id);
             let impl_item = tcx.hir().impl_item(item.id);
+            // println!("{:#?}", impl_item);
             match &impl_item.kind {
                 ImplItemKind::Fn(sig, body_id) => {
+                    // println!("fn");
                     if let Safety::Unsafe = sig.header.safety {
                         continue;
                     }
-                    debug!(
+                    info!(
                         "HIR: Found method {}, parent: {}",
                         &impl_item.ident, parent_hir_id
                     );
@@ -571,6 +583,7 @@ fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, 
 
                         let mut params = Vec::with_capacity(sig.decl.inputs.len());
                         for input in sig.decl.inputs.iter() {
+                            info!("input: {:#?}", input);
                             let param = ty_to_param(
                                 None,
                                 input,
@@ -579,6 +592,7 @@ fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, 
                                 &overall_generics,
                                 tcx,
                             );
+                            info!("param: {:#?}", param);
                             if let Some(param) = param {
                                 debug!("HIR: Extracting parameter {:?}", param);
                                 params.push(param);
@@ -591,7 +605,7 @@ fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, 
 
                         if !sig.decl.implicit_self.has_implicit_self() {
                             // Static method
-                            debug!("HIR: Method is static");
+                            info!("HIR: Method is static");
                             let static_method_item = RuStaticMethod::new(
                                 &fn_name,
                                 file_path.to_str().unwrap(),
@@ -608,7 +622,7 @@ fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, 
                             callables.push(static_method_callable);
                         } else {
                             // Dynamic method
-                            debug!("HIR: Method is associative");
+                            info!("HIR: Method is associative");
                             let method_item = RuMethod::new(
                                 &fn_name,
                                 file_path.to_str().unwrap(),

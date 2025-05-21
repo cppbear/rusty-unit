@@ -918,7 +918,14 @@ public class TestCase extends AbstractTestCaseChromosome<TestCase> {
     }
 
     logger.debug("({}) Selected generator: {} (Total: {})", id, generator, generators.size());
-    var typeBinding = TypeUtil.typeBinding(type, generator);
+    // var typeBinding = TypeUtil.typeBinding(type, generator);
+    TypeBinding typeBinding;
+    try {
+      typeBinding = TypeUtil.typeBinding(type, generator);
+    } catch (Exception e) {
+      generators.remove(generator);
+      return generateArgFromGenerators(type, generators, typesToGenerate, filePathBinding);
+    }
     if (typeBinding.hasUnboundedGeneric()) {
       logger.warn("Could not bind all generics: {}", typeBinding.getUnboundGenerics());
       generators.remove(generator);

@@ -136,7 +136,6 @@ public class TyCtxt {
     throw new RuntimeException("Not implemented");
   }
 
-
   public List<Callable> getCallables() {
     return callables;
   }
@@ -151,8 +150,7 @@ public class TyCtxt {
       stream = stream.filter(
           callable -> callable.isPublic()
               || (callable.getSrcFilePath() != null
-              && callable.getSrcFilePath().equals(filePath))
-      );
+                  && callable.getSrcFilePath().equals(filePath)));
     }
 
     if (localOnly) {
@@ -221,9 +219,12 @@ public class TyCtxt {
   }
 
   /**
-   * Returns the generators which can either generate a type that 1) is the same, e.g., u32 == u32
-   * 2) is generic and can be the given type wrt the trait bounds, e.g., T: Default == u32 3) is a
-   * container and some inner type can be same as given type, e.g., Vec<u32> == u32
+   * Returns the generators which can either generate a type that 1) is the same,
+   * e.g., u32 == u32
+   * 2) is generic and can be the given type wrt the trait bounds, e.g., T:
+   * Default == u32 3) is a
+   * container and some inner type can be same as given type, e.g., Vec<u32> ==
+   * u32
    *
    * @param type The type to look for.
    * @return The generators of the type.
@@ -236,14 +237,22 @@ public class TyCtxt {
         .filter(m -> m.getReturnType() != null && !m.getReturnType().isGeneric());
     var callablesStream = callables.stream();
 
+    // var stream = Stream.concat(typeMethodsStream, callablesStream)
+    // .filter(subClass::isInstance)
+    // .filter(callable -> callable.returnsValue()
+    // && (callable.getReturnType().canBeSameAs(type)));
+    // Unless we want the type explicitly, exclude completely generic callables like
+    // Option::unwrap(Option) -> T, which would generate a wrapper just to unwrap it
+    // later
+    // .filter(callable ->
+    // (callable.getReturnType().getName().equals(type.getName()))
+    // || !callable.getReturnType().isGeneric());
     var stream = Stream.concat(typeMethodsStream, callablesStream)
         .filter(subClass::isInstance)
         .filter(callable -> callable.returnsValue()
-            && (callable.getReturnType().canBeSameAs(type)));
-    // Unless we want the type explicitly, exclude completely generic callables like
-    // Option::unwrap(Option) -> T, which would generate a wrapper just to unwrap it later
-//        .filter(callable -> (callable.getReturnType().getName().equals(type.getName()))
-//            || !callable.getReturnType().isGeneric());
+            && (!callable.getReturnType().getName().isEmpty()
+                && (callable.getReturnType().getName().equals(type.getName()))
+                && !callable.getReturnType().isGeneric()));
 
     List<Callable> generators;
     if (filePath != null) {

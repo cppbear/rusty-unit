@@ -23,7 +23,15 @@ public class TypeUtil {
   public static TyCtxt tyCtxt;
 
   public static TypeBinding typeBinding(Type type, Callable callable) {
-    TypeBinding typeBinding = TypeUtil.getNecessaryBindings(callable.getReturnType(), type);
+    System.out.printf("generic: %s, concrete: %s\n", callable.getReturnType(), type);
+    // TypeBinding typeBinding =
+    // TypeUtil.getNecessaryBindings(callable.getReturnType(), type);
+    TypeBinding typeBinding;
+    try {
+      typeBinding = TypeUtil.getNecessaryBindings(callable.getReturnType(), type);
+    } catch (Exception e) {
+      throw e;
+    }
     callable.getParams().stream()
         .map(Param::type)
         .map(TypeUtil::getDeepGenerics)
@@ -32,7 +40,7 @@ public class TypeUtil {
 
     if (callable.isMethod()) {
       var methodGenerics = Stream.concat(callable.getParent().generics().stream(),
-              callable.asMethod().generics().stream())
+          callable.asMethod().generics().stream())
           .filter(Type::isGeneric)
           .map(Type::asGeneric)
           .collect(Collectors.toSet());
@@ -76,8 +84,7 @@ public class TypeUtil {
     if (callable.getParent() != null) {
       generics.addAll(
           callable.getParent().generics().stream().filter(Type::isGeneric).map(Type::asGeneric)
-              .collect(Collectors.toSet())
-      );
+              .collect(Collectors.toSet()));
     }
 
     if (callable.isMethod()) {
@@ -99,7 +106,8 @@ public class TypeUtil {
     Set<Generic> generics = TypeUtil.getDeepGenerics(type);
     var typeBinding = new TypeBinding((LinkedHashSet<Generic>) generics);
 
-    // Set for all generics some appropriate random type that complies with all constraints
+    // Set for all generics some appropriate random type that complies with all
+    // constraints
     // and type bounds
     generics.stream().map(g -> Pair.with(g, getTypeFor(g)))
         .filter(p -> p.getValue1().isPresent())
@@ -109,7 +117,8 @@ public class TypeUtil {
   }
 
   /**
-   * Recursively generate an actual type, e.g. if we generate std::vec::Vec&lt;T&gt;, then also
+   * Recursively generate an actual type, e.g. if we generate
+   * std::vec::Vec&lt;T&gt;, then also
    * generate an actual type for T.
    *
    * @param generic Generic type to substitute.
@@ -202,8 +211,7 @@ public class TypeUtil {
       }
       IntStream.range(0, generic.generics().size()).forEach(
           i -> getNecessaryBindingsInner(generic.generics().get(i), concrete.generics().get(i),
-              typeBinding)
-      );
+              typeBinding));
     }
 
     return typeBinding;

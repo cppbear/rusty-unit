@@ -224,7 +224,7 @@ pub fn path_to_t(
             _ => None,
         },
         Res::PrimTy(prim_ty) => Some(RuTy::from(*prim_ty)),
-        Res::SelfTyParam { trait_, .. } => {
+        Res::SelfTyAlias { alias_to, .. } => {
             self_ty.map(|self_ty| self_ty.clone())
             // if let Some(trait_) = trait_ {
             //     let trait_name = tcx.def_path_str(*trait_);

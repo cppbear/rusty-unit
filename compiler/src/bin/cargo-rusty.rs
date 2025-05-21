@@ -112,7 +112,12 @@ fn current_crate() -> cargo_metadata::Package {
 
 fn rusty() -> Command {
     let mut path = std::env::current_exe().expect("current executable path invalid");
+    // eprintln!("Path before change: {:?}", path);
+    #[cfg(not(feature = "analysis"))]
+    path.set_file_name("instrumentation");
+    #[cfg(feature = "analysis")]
     path.set_file_name("analysis");
+    // eprintln!("Path after change: {:?}", path);
     Command::new(path)
 }
 
@@ -159,6 +164,7 @@ fn main() {
     {
         // This arm is executed when `cargo-rbrinfo` runs `cargo rustc` with the `RUSTC_WRAPPER` env var set to itself:
         // dependencies get dispatched to `rustc`, the final library/binary to `rbrinfo`.
+        // eprintln!("{:#?}", std::env::args());
         inside_cargo_rustc();
     } else {
         show_error(
