@@ -305,6 +305,6 @@ code-analysis/**
 **/*.pyc
 **/*.log.gz
 
-./evaluation/**
+/evaluation/**
 #**/bin/*
 *.class
