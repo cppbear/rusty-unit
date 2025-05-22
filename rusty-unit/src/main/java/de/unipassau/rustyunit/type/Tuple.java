@@ -5,6 +5,8 @@ import com.google.common.collect.Streams;
 import de.unipassau.rustyunit.test_case.callable.Callable;
 import de.unipassau.rustyunit.test_case.callable.TupleAccess;
 import de.unipassau.rustyunit.type.traits.Trait;
+
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -75,7 +77,7 @@ public class Tuple implements Type {
       var otherTuple = other.asTuple();
       return types.size() == otherTuple.types.size()
           && Streams.zip(types.stream(), otherTuple.types.stream(), Pair::with)
-          .allMatch(pair -> pair.getValue0().canBeSameAs(pair.getValue1()));
+              .allMatch(pair -> pair.getValue0().canBeSameAs(pair.getValue1()));
     } else if (other.isGeneric()) {
       return implementedTraits().containsAll(other.asGeneric().getBounds());
     }
@@ -86,8 +88,8 @@ public class Tuple implements Type {
   @Override
   public Optional<Integer> wraps(Type type) {
     var res = IntStream.range(0, types.size())
-          .filter(i -> types.get(i).canBeSameAs(type) || types.get(i).wraps(type).isPresent())
-          .findFirst();
+        .filter(i -> types.get(i).canBeSameAs(type) || types.get(i).wraps(type).isPresent())
+        .findFirst();
     if (res.isPresent()) {
       return Optional.of(res.getAsInt());
     } else {
@@ -112,7 +114,8 @@ public class Tuple implements Type {
 
   @Override
   public Set<Trait> implementedTraits() {
-    throw new RuntimeException("implementedTraits is not implemented");
+    // throw new RuntimeException("implementedTraits is not implemented");
+    return Collections.emptySet();
   }
 
   @Override
@@ -123,8 +126,7 @@ public class Tuple implements Type {
   @Override
   public Type replaceGenerics(List<Type> generics) {
     return new Tuple(
-        types.stream().map(ty -> ty.replaceGenerics(Objects.requireNonNull(generics))).toList()
-    );
+        types.stream().map(ty -> ty.replaceGenerics(Objects.requireNonNull(generics))).toList());
   }
 
   @Override

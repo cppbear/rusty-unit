@@ -42,7 +42,19 @@ pub fn hir_analysis(tcx: TyCtxt<'_>) {
     for i in tcx.hir().items() {
         let item = tcx.hir().item(i);
         let def_id = item.owner_id.to_def_id();
-        if def_id_to_str(def_id, &tcx).contains("serde") {
+        let def_id_to_str = def_id_to_str(def_id, &tcx);
+        println!("def_id_to_str: {:?}", def_id_to_str);
+        if def_id_to_str.contains("serde")
+            || def_id_to_str ==
+                "map::slice::<impl std::cmp::PartialEq<map::slice::Slice<K2, V2>> for [(K, V); N]>"
+            || def_id_to_str == "<map::slice::Slice<K, V> as std::cmp::Eq>"
+            || def_id_to_str == "<map::slice::Slice<K, V> as std::cmp::PartialOrd>"
+            || def_id_to_str == "<map::IndexMap<K, V, S> as std::cmp::Eq>"
+            || def_id_to_str
+                == "set::slice::<impl std::cmp::PartialEq<set::slice::Slice<U>> for [T; N]>"
+            || def_id_to_str == "<set::slice::Slice<T> as std::cmp::Eq>"||def_id_to_str=="<set::slice::Slice<T> as std::cmp::PartialOrd>"||def_id_to_str=="<set::IndexSet<T, S> as std::cmp::Eq>"
+            || def_id_to_str=="<TryReserveError as std::cmp::Eq>" || def_id_to_str=="<TryReserveErrorKind as std::cmp::Eq>"||def_id_to_str=="<GetDisjointMutError as std::cmp::Eq>"
+        {
             continue;
         }
 
@@ -550,6 +562,24 @@ fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, 
                         .ident()
                         .unwrap()
                         .to_string();
+                    println!("fn name: {:?}", fn_name);
+                    // if fn_name == "static_empty"
+                    //     || fn_name == "get_many_mut"
+                    //     || fn_name == "get_many_key_value_mut"
+                    if fn_name == "get_disjoint_opt_mut"
+                        || fn_name == "get_disjoint_mut"
+                        || fn_name == "get_disjoint_indices_mut"
+                    {
+                        continue;
+                    }
+                    let parent_name =
+                        node_to_name(&tcx.hir().hir_node(parent_hir_id), tcx).unwrap();
+                    println!("parent name: {:?}", parent_name);
+                    if parent_name == "map::HashMap" || parent_name == "set::HashSet" {
+                        // Skip too hard stuff
+                        warn!("HIR: Skipping too hard method");
+                        continue;
+                    }
                     let fn_generics = generics_to_ts(
                         &impl_item.generics,
                         Some(&self_ty),
@@ -575,7 +605,13 @@ fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, 
                         let is_public = is_public(tcx.visibility(impl_item.owner_id.to_def_id()));
                         let parent_name =
                             node_to_name(&tcx.hir().hir_node(parent_hir_id), tcx).unwrap();
-                        if parent_name.contains("serde") {
+                        println!("parent name: {:?}", parent_name);
+                        if parent_name.contains("serde")
+                            || parent_name == "map::slice::Slice"
+                            || parent_name == "map::IndexMap"
+                            || parent_name == "set::slice::Slice"
+                            || parent_name == "set::IndexSet"
+                        {
                             // Skip too hard stuff
                             warn!("HIR: Skipping serde method");
                             continue;
@@ -583,7 +619,7 @@ fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, 
 
                         let mut params = Vec::with_capacity(sig.decl.inputs.len());
                         for input in sig.decl.inputs.iter() {
-                            info!("input: {:#?}", input);
+                            // info!("input: {:#?}", input);
                             let param = ty_to_param(
                                 None,
                                 input,
@@ -592,7 +628,7 @@ fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, 
                                 &overall_generics,
                                 tcx,
                             );
-                            info!("param: {:#?}", param);
+                            // info!("param: {:#?}", param);
                             if let Some(param) = param {
                                 debug!("HIR: Extracting parameter {:?}", param);
                                 params.push(param);

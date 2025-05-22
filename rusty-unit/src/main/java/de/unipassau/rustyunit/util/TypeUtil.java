@@ -23,7 +23,8 @@ public class TypeUtil {
   public static TyCtxt tyCtxt;
 
   public static TypeBinding typeBinding(Type type, Callable callable) {
-    System.out.printf("generic: %s, concrete: %s\n", callable.getReturnType(), type);
+    // System.out.printf("generic: %s, concrete: %s\n", callable.getReturnType(),
+    // type);
     // TypeBinding typeBinding =
     // TypeUtil.getNecessaryBindings(callable.getReturnType(), type);
     TypeBinding typeBinding;

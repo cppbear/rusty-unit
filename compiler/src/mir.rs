@@ -5,7 +5,7 @@ use crate::mir::ValueDef::Var;
 use crate::monitor::{BinaryOp, UnaryOp};
 use crate::rustc_middle::ty::inherent::Ty as NTy;
 use crate::types::{ty_name, RuConstVal, RuPrim, RuTy};
-use crate::utils::{ty_to_name, ty_to_t, tys_to_t, span_to_path};
+use crate::utils::{span_to_path, ty_to_name, ty_to_t, tys_to_t};
 #[cfg(feature = "analysis")]
 use crate::writer::{MirObject, MirObjectBuilder, MirWriter};
 use crate::{RuConfig, DOT_DIR, INSTRUMENTED_MIR_LOG_NAME, LOG_DIR};
@@ -851,10 +851,15 @@ impl<'tcx> MirVisitor<'tcx> {
                         let (left, right) = operands.as_ref();
                         let left_ty = self.operand_ty(left);
                         let right_ty = self.operand_ty(right);
+                        let left = ValueDef::from_operand(left, left_ty);
+                        let right = ValueDef::from_operand(right, right_ty);
+                        if left.is_none() || right.is_none() {
+                            return None;
+                        }
                         return Some(ValueDef::BinaryOp(
                             to_binary_op(op),
-                            Box::new(ValueDef::from_operand(left, left_ty)),
-                            Box::new(ValueDef::from_operand(right, right_ty)),
+                            Box::new(left.unwrap()),
+                            Box::new(right.unwrap()),
                         ));
                     }
                     Rvalue::UnaryOp(op, operand) => {
@@ -877,10 +882,15 @@ impl<'tcx> MirVisitor<'tcx> {
                                     Box::new(inner_value_def),
                                 ))
                             }
-                            Operand::Constant(_) => Some(ValueDef::UnaryOp(
-                                to_unary_op(op),
-                                Box::new(ValueDef::from_operand(operand, self.operand_ty(operand))),
-                            )),
+                            Operand::Constant(_) => {
+                                let value =
+                                    ValueDef::from_operand(operand, self.operand_ty(operand));
+                                if value.is_none() {
+                                    return None;
+                                }
+
+                                Some(ValueDef::UnaryOp(to_unary_op(op), Box::new(value.unwrap())))
+                            }
                         };
                     }
                     Rvalue::Use(operand) => match operand {
@@ -1220,9 +1230,14 @@ impl<'tcx> MirVisitor<'tcx> {
         info!("MIR: Instrument switch int");
         let mut instrumentation = match &mut terminator.kind {
             TerminatorKind::SwitchInt { discr, targets } => {
-                let switch_operand_place = self
-                    .get_place(discr)
-                    .expect("Place has been defined in a previous block");
+                // let switch_operand_place = self
+                //     .get_place(discr)
+                //     .expect("Place has been defined in a previous block");
+                let switch_operand_place = self.get_place(discr);
+                if switch_operand_place.is_none() {
+                    return;
+                }
+                let switch_operand_place = switch_operand_place.unwrap();
                 let switch_operand_def = self.get_place_definition(switch_operand_place);
                 if switch_operand_def.is_none() {
                     return;
@@ -1794,22 +1809,22 @@ impl<'a> ValueDef<'a> {
         panic!("Is not var");
     }
 
-    fn from_operand(operand: &Operand<'a>, ty: Ty<'a>) -> ValueDef<'a> {
+    fn from_operand(operand: &Operand<'a>, ty: Ty<'a>) -> Option<ValueDef<'a>> {
         match operand {
-            Operand::Copy(place) | Operand::Move(place) => ValueDef::Var(*place, ty),
+            Operand::Copy(place) | Operand::Move(place) => Some(ValueDef::Var(*place, ty)),
             Operand::Constant(const_operand) => match &const_operand.const_ {
                 rustc_middle::mir::Const::Ty(ty, constant_ty) => {
                     let val = constant_ty.kind();
-                    ValueDef::Const(*ty, val)
+                    Some(ValueDef::Const(*ty, val))
                 }
-                rustc_middle::mir::Const::Val(const_value, ty) => ValueDef::Const(
+                rustc_middle::mir::Const::Val(const_value, ty) => Some(ValueDef::Const(
                     *ty,
                     ConstKind::Value(
                         *ty,
                         ValTree::from_scalar_int(const_value.try_to_scalar_int().unwrap()),
                     ),
-                ),
-                _ => todo!(),
+                )),
+                _ => None,
             },
         }
     }

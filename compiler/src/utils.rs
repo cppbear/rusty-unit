@@ -133,9 +133,13 @@ pub fn ty_to_t(
             }
 
             todo!("Unknown array length")
+            // None
         }
         TyKind::TraitObject(trait_refs, _, _) => {
-            assert!(trait_refs.len() == 1);
+            // assert!(trait_refs.len() == 1);
+            if trait_refs.len() > 1 {
+                return None;
+            }
             let poly_trait_ref = trait_refs.get(0).unwrap();
             let name = res_to_name(&poly_trait_ref.trait_ref.path.res, tcx);
             let trait_obj = RuTraitObj::new(&name, false);
@@ -266,7 +270,7 @@ pub fn def_kind_to_t(
             is_local(def_id),
         ))),
         DefKind::Union => Some(RuTy::Union(RuUnion::new(&name, is_local(def_id)))),
-        _ => unimplemented!(),
+        _ => None,
     }
 }
 
@@ -607,7 +611,15 @@ pub fn ty_to_def_id(ty: &Ty<'_>, tcx: &TyCtxt<'_>) -> Option<DefId> {
 }
 
 fn eval_array_len(array_len: &ArrayLen, tcx: &TyCtxt<'_>) -> Option<usize> {
-    let array_len_def_id = array_len.hir_id().owner.def_id.to_def_id();
+    // println!("{:#?}", array_len);
+    let array_len_def_id = array_len.hir_id().owner.to_def_id();
+    // println!("{:#?}", array_len.hir_id());
+    // println!("{:#?}", array_len_def_id);
+    // if format!("{:?}", array_len_def_id)
+    //     == "DefId(0:2553 ~ hashbrown[d727]::control::group::sse2::{impl#0}::static_empty)"
+    // {
+    //     return None;
+    // }
     let len = tcx.const_eval_poly(array_len_def_id);
 
     if let Some(len) = len.ok() {

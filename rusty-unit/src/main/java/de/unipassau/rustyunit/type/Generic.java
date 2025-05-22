@@ -42,14 +42,16 @@ public class Generic implements Type {
 
   @Override
   public boolean canBeSameAs(Type other) {
-    /*if (other.isRef()) {
-      var ref = other.asRef();
-      return canBeSameAs(ref.getInnerType());
-    } else if (other.isGeneric()) {
-      return equals(other);
-    } else {
-      return false;
-    }*/
+    /*
+     * if (other.isRef()) {
+     * var ref = other.asRef();
+     * return canBeSameAs(ref.getInnerType());
+     * } else if (other.isGeneric()) {
+     * return equals(other);
+     * } else {
+     * return false;
+     * }
+     */
     if (other.isGeneric()) {
       return bounds.equals(other.asGeneric().bounds);
     } else {
@@ -147,7 +149,7 @@ public class Generic implements Type {
   public String toString() {
     var bounds = getBounds().stream().map(Trait::toString).collect(Collectors.joining(" + "));
     return name + ": " + bounds;
-    //return encode();
+    // return encode();
   }
 
   public List<Trait> getBounds() {

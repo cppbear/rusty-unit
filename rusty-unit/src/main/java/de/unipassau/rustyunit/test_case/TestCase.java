@@ -461,6 +461,20 @@ public class TestCase extends AbstractTestCaseChromosome<TestCase> {
     }
 
     logger.info("({}) Inserting random stmt. Selected callable: {}", id, callable);
+    String callableName = callable.getName();
+    // if (callableName == "crate::header::map::VacantEntry::key(&
+    // header::map::VacantEntry) -> &crate::header::name::HeaderName"
+    // || callableName ==
+    // "crate::header::map::OccupiedEntry::into_mut(header::map::OccupiedEntry) ->
+    // &mut T"
+    // || callableName == "std::fmt::Debug::fmt(& header::map::Values, mut &mut
+    // std::fmt::Formatter) -> ()"
+    // || callableName == "std::fmt::Debug::fmt(& header::map::ValuesMut, mut &mut
+    // std::fmt::Formatter) -> ()"
+    // || callableName == "std::clone::Clone::clone(& header::map::Bucket) ->
+    // crate::header::map::Bucket<T: std::clone::Clone + std::clone::Clone>") {
+    // return Optional.empty();
+    // }
 
     return insertCallable(callable, filePathBinding.orElse(null));
   }
