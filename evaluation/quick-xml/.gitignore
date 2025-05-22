@@ -1,5 +1,0 @@
-target
-.project
-# macOS hidden files
-.DS_Store
-analysis/** 

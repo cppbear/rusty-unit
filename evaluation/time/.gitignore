@@ -1,4 +1,0 @@
-**/target
-**/*.rs.bk
-tarpaulin-report.html
-analysis/** 
