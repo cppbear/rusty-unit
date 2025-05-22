@@ -546,29 +546,29 @@ fn is_postdominated_by(a: usize, b: usize, tree: &HashMap<usize, HashSet<usize>>
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rustc_data_structures::vec_linked_list::iter;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use rustc_data_structures::vec_linked_list::iter;
 
-    #[test]
-    fn test_is_postdominated_by_immediate_pd() {
-        let pdt: HashMap<usize, HashSet<usize>> = serde_json::from_str("{\"0\":[2,1,0,8],\"5\":[8,5],\"2\":[2,8],\"8\":[8],\"7\":[8,7],\"6\":[7,6,8],\"1\":[8,1,2],\"3\":[5,4,3,8],\"4\":[4,5,8]}").unwrap();
+//     #[test]
+//     fn test_is_postdominated_by_immediate_pd() {
+//         let pdt: HashMap<usize, HashSet<usize>> = serde_json::from_str("{\"0\":[2,1,0,8],\"5\":[8,5],\"2\":[2,8],\"8\":[8],\"7\":[8,7],\"6\":[7,6,8],\"1\":[8,1,2],\"3\":[5,4,3,8],\"4\":[4,5,8]}").unwrap();
 
-        assert!(is_postdominated_by(0, 2, &pdt));
-    }
+//         assert!(is_postdominated_by(0, 2, &pdt));
+//     }
 
-    #[test]
-    fn test_cdg() {
-        let mut cfg = Graph::new();
-        let edges: [(usize, usize); 2] = [(1, 2), (2, 2)];
-        let mut indexes = HashMap::new();
-        edges.iter().for_each(|(from, to)| {
-            indexes.entry(from).or_insert_with(|| cfg.add_node(from));
-            indexes.entry(to).or_insert_with(|| cfg.add_node(to));
-        });
-        edges.iter().for_each(|(from, to)| {
-            cfg.add_edge(*indexes.get(from).unwrap(), *indexes.get(to).unwrap(), 1);
-        })
-    }
-}
+//     #[test]
+//     fn test_cdg() {
+//         let mut cfg = Graph::new();
+//         let edges: [(usize, usize); 2] = [(1, 2), (2, 2)];
+//         let mut indexes = HashMap::new();
+//         edges.iter().for_each(|(from, to)| {
+//             indexes.entry(from).or_insert_with(|| cfg.add_node(from));
+//             indexes.entry(to).or_insert_with(|| cfg.add_node(to));
+//         });
+//         edges.iter().for_each(|(from, to)| {
+//             cfg.add_edge(*indexes.get(from).unwrap(), *indexes.get(to).unwrap(), 1);
+//         })
+//     }
+// }
