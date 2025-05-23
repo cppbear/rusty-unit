@@ -44,10 +44,10 @@
     html_favicon_url = "https://www.rust-lang.org/favicon.ico",
     html_root_url = "https://rust-random.github.io/rand/"
 )]
-#![deny(missing_docs)]
+// #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
 #![doc(test(attr(allow(unused_variables), deny(warnings))))]
-#![no_std]
+// #![no_std]
 #![cfg_attr(feature = "simd_support", feature(portable_simd))]
 #![cfg_attr(
     all(feature = "simd_support", target_feature = "avx512bw"),
@@ -63,8 +63,11 @@
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
-#[cfg(feature = "std")]
+// #[cfg(feature = "std")]
 extern crate std;
+
+pub use ntest::timeout;
+pub mod rusty_monitor;
 
 #[allow(unused)]
 macro_rules! trace { ($($x:tt)*) => (
@@ -330,3 +333,4 @@ mod test {
         let _f: f32 = random_range(42.0..43.0);
     }
 }
+

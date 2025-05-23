@@ -72,6 +72,9 @@ public class Result extends AbstractEnum {
 
   @Override
   public Type copy() {
+    if (generics().size() < 2) {
+      throw new IllegalStateException("Result type must have at least two generic parameters.");
+    }
     return new Result(this);
   }
 }

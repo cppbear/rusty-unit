@@ -586,7 +586,12 @@ public class TestCase extends AbstractTestCaseChromosome<TestCase> {
     VarReference returnValue = null;
     if (method.returnsValue()) {
       // TODO: 14.02.22 there probably will be some troubles with type binding
-      returnValue = createVariable(method.getReturnType().bindGenerics(typeBinding));
+      // returnValue = createVariable(method.getReturnType().bindGenerics(typeBinding));
+      try {
+        returnValue = createVariable(method.getReturnType().bindGenerics(typeBinding));
+      } catch (RuntimeException e) {
+        return Optional.empty();
+      }
       returnValue.setBinding(typeBinding);
     }
 
@@ -643,7 +648,13 @@ public class TestCase extends AbstractTestCaseChromosome<TestCase> {
 
     var args = callable.getParams().stream()
         .map(p -> {
-          Type typeToGenerate = p.type().bindGenerics(typeBinding);
+          // Type typeToGenerate = p.type().bindGenerics(typeBinding);
+          Type typeToGenerate;
+          try {
+            typeToGenerate = p.type().bindGenerics(typeBinding);
+          } catch (RuntimeException e) {
+            return Optional.<VarReference>empty();
+          }
           logger.debug("({}) Bounded param {} to {}", id, p, typeToGenerate);
 
           return generateArg(typeToGenerate, callable.globalId(), filePathBinding);
@@ -659,7 +670,12 @@ public class TestCase extends AbstractTestCaseChromosome<TestCase> {
 
     VarReference returnValue = null;
     if (callable.returnsValue()) {
-      returnValue = createVariable(callable.getReturnType().bindGenerics(typeBinding));
+      // returnValue = createVariable(callable.getReturnType().bindGenerics(typeBinding));
+      try {
+        returnValue = createVariable(callable.getReturnType().bindGenerics(typeBinding));
+      }  catch (RuntimeException e) {
+        return Optional.empty();
+      }
       returnValue.setBinding(typeBinding);
     }
 
@@ -766,6 +782,12 @@ public class TestCase extends AbstractTestCaseChromosome<TestCase> {
       return Optional.empty();
     }
 
+    // var refType = ref.getInnerType().bindGenerics(typeBinding);
+    try {
+      var refType = ref.getInnerType().bindGenerics(typeBinding);
+    }  catch (RuntimeException e) {
+      return Optional.empty();
+    }
     var refType = ref.getInnerType().bindGenerics(typeBinding);
     if (typesToGenerate.contains(refType)) {
       return Optional.empty();
@@ -963,8 +985,14 @@ public class TestCase extends AbstractTestCaseChromosome<TestCase> {
 
           var extendedTypesToGenerate = new HashSet<>(typesToGenerate);
           extendedTypesToGenerate.add(type);
-          return generateArg(p.type().bindGenerics(typeBinding),
-              extendedTypesToGenerate, globalId, subsequentPathBinding);
+          // return generateArg(p.type().bindGenerics(typeBinding),
+          //     extendedTypesToGenerate, globalId, subsequentPathBinding);
+          try {
+            return generateArg(p.type().bindGenerics(typeBinding),
+                 extendedTypesToGenerate, globalId, subsequentPathBinding);
+          } catch (RuntimeException e) {
+            return Optional.<VarReference>empty();
+          }
         })
         .filter(Optional::isPresent)
         .map(Optional::get)

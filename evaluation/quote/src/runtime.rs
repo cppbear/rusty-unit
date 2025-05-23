@@ -195,7 +195,7 @@ pub fn get_span<T>(span: T) -> GetSpan<T> {
     GetSpan(GetSpanInner(GetSpanBase(span)))
 }
 
-mod get_span {
+pub mod get_span {
     use core::ops::Deref;
     use proc_macro2::extra::DelimSpan;
     use proc_macro2::Span;

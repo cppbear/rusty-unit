@@ -363,8 +363,8 @@
 // Restrictions
 #![deny(clippy::question_mark_used)]
 #![allow(non_upper_case_globals)]
-#![deny(missing_docs)]
-#![no_std]
+// #![deny(missing_docs)]
+// #![no_std]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(not(any(feature = "std", feature = "alloc")))]
@@ -435,3 +435,6 @@ mod read;
 
 #[cfg(feature = "raw_value")]
 mod raw;
+
+pub use ntest::timeout;
+pub mod rusty_monitor;

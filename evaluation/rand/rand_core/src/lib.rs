@@ -34,9 +34,9 @@
 #![deny(clippy::undocumented_unsafe_blocks)]
 #![doc(test(attr(allow(unused_variables), deny(warnings))))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
-#![no_std]
+// #![no_std]
 
-#[cfg(feature = "std")]
+// #[cfg(feature = "std")]
 extern crate std;
 
 use core::{fmt, ops::DerefMut};

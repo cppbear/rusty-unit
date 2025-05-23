@@ -87,7 +87,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
-#![no_std]
+// #![no_std]
 
 mod pcg128;
 mod pcg128cm;

@@ -14,22 +14,22 @@ edition = "2018"
 # This option was added in 1.56, keep it for when we bump MSRV.
 rust-version = "1.48.0"
 
-[[bench]]
-name = "benchmarks"
-harness = false
-required-features = ["std"]
+# [[bench]]
+# name = "benchmarks"
+# harness = false
+# required-features = ["std"]
 
-[[example]]
-name = "base64"
-required-features = ["std"]
+# [[example]]
+# name = "base64"
+# required-features = ["std"]
 
-[[test]]
-name = "tests"
-required-features = ["alloc"]
+# [[test]]
+# name = "tests"
+# required-features = ["alloc"]
 
-[[test]]
-name = "encode"
-required-features = ["alloc"]
+# [[test]]
+# name = "encode"
+# required-features = ["alloc"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--generate-link-to-definition"]
@@ -58,3 +58,9 @@ debug = true
 [profile.test]
 # Faster tests save much more than the increase in compilation time
 opt-level = 3
+
+[dependencies.redis]
+version = "0.11.0"
+
+[dependencies.ntest]
+version = "0.7.5"

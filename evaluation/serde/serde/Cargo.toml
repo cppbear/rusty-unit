@@ -69,3 +69,9 @@ alloc = []
 # does not preserve identity and may result in multiple copies of the same data.
 # Be sure that this is what you want before enabling this feature.
 rc = []
+
+[dependencies.redis]
+version = "0.11.0"
+
+[dependencies.ntest]
+version = "0.7.5"

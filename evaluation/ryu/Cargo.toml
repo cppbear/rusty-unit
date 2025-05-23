@@ -35,3 +35,9 @@ rustdoc-args = [
     "--extern-html-root-url=alloc=https://doc.rust-lang.org",
     "--extern-html-root-url=std=https://doc.rust-lang.org",
 ]
+
+[dependencies.redis]
+version = "0.11.0"
+
+[dependencies.ntest]
+version = "0.7.5"

@@ -1312,8 +1312,8 @@ of substrings to search for is relatively small. The `regex` crate also uses
 this for literal optimizations.
 */
 
-#![no_std]
-#![deny(missing_docs)]
+// #![no_std]
+// #![deny(missing_docs)]
 #![cfg_attr(feature = "pattern", feature(pattern))]
 #![warn(missing_debug_implementations)]
 
@@ -1344,3 +1344,6 @@ mod regexset;
 pub fn escape(pattern: &str) -> alloc::string::String {
     regex_syntax::escape(pattern)
 }
+
+pub use ntest::timeout;
+pub mod rusty_monitor;

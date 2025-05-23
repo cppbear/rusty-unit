@@ -19,6 +19,9 @@
     clippy::range_plus_one
 )]
 
+extern crate ntest;
+extern crate redis;
+
 use std::char;
 use std::cmp::{max, min};
 use std::collections::HashMap;
@@ -163,7 +166,7 @@ where
     }
 }
 
-struct StringWrapper<'a>(&'a str);
+pub struct StringWrapper<'a>(&'a str);
 
 impl<'a, 'b> IntoIterator for &'a StringWrapper<'b> {
     type Item = char;
@@ -414,7 +417,7 @@ where
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-struct RowId {
+pub struct RowId {
     val: isize,
 }
 
@@ -425,7 +428,7 @@ impl Default for RowId {
 }
 
 #[derive(Default, Clone)]
-struct GrowingHashmapMapElemChar<ValueType> {
+pub struct GrowingHashmapMapElemChar<ValueType> {
     key: u32,
     value: ValueType,
 }
@@ -437,7 +440,7 @@ struct GrowingHashmapMapElemChar<ValueType> {
 /// - elements can't be removed
 /// - only allocates memory on first write access.
 ///   This improves performance for hashmaps that are never written to
-struct GrowingHashmapChar<ValueType> {
+pub struct GrowingHashmapChar<ValueType> {
     used: i32,
     fill: i32,
     mask: i32,
@@ -606,7 +609,7 @@ where
     }
 }
 
-fn damerau_levenshtein_impl<Iter1, Iter2>(s1: Iter1, len1: usize, s2: Iter2, len2: usize) -> usize
+pub fn damerau_levenshtein_impl<Iter1, Iter2>(s1: Iter1, len1: usize, s2: Iter2, len2: usize) -> usize
 where
     Iter1: Iterator<Item = char> + Clone,
     Iter2: Iterator<Item = char> + Clone,
@@ -1305,3 +1308,6 @@ mod tests {
         );
     }
 }
+
+pub use ntest::timeout;
+pub mod rusty_monitor;

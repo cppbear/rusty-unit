@@ -220,21 +220,22 @@
 //!
 //! If length calculations result in overflowing `usize`, a panic will result.
 
-#![cfg_attr(feature = "cargo-clippy", allow(clippy::cast_lossless))]
-#![deny(
-    missing_docs,
-    trivial_casts,
-    trivial_numeric_casts,
-    unused_extern_crates,
-    unused_import_braces,
-    unused_results,
-    variant_size_differences
-)]
-#![forbid(unsafe_code)]
+
+// #![cfg_attr(feature = "cargo-clippy", allow(clippy::cast_lossless))]
+// #![deny(
+//     // missing_docs,
+//     trivial_casts,
+//     trivial_numeric_casts,
+//     unused_extern_crates,
+//     unused_import_braces,
+//     unused_results,
+//     variant_size_differences
+// )]
+// #![forbid(unsafe_code)]
 // Allow globally until https://github.com/rust-lang/rust-clippy/issues/8768 is resolved.
 // The desired state is to allow it only for the rstest_reuse import.
-#![allow(clippy::single_component_path_imports)]
-#![cfg_attr(not(any(feature = "std", test)), no_std)]
+// #![allow(clippy::single_component_path_imports)]
+// #![cfg_attr(not(any(feature = "std", test)), no_std)]
 
 #[cfg(any(feature = "alloc", test))]
 extern crate alloc;
@@ -275,3 +276,6 @@ pub mod prelude;
 mod tests;
 
 const PAD_BYTE: u8 = b'=';
+
+pub use ntest::timeout;
+pub mod rusty_monitor;

@@ -63,30 +63,36 @@ unstable = []
 # Only for backwards compatibility.
 atomic-polyfill = ["critical-section"]
 
-[[example]]
-name = "bench"
-required-features = ["std"]
+# [[example]]
+# name = "bench"
+# required-features = ["std"]
 
-[[example]]
-name = "bench_acquire"
-required-features = ["std"]
+# [[example]]
+# name = "bench_acquire"
+# required-features = ["std"]
 
-[[example]]
-name = "lazy_static"
-required-features = ["std"]
+# [[example]]
+# name = "lazy_static"
+# required-features = ["std"]
 
-[[example]]
-name = "reentrant_init_deadlocks"
-required-features = ["std"]
+# [[example]]
+# name = "reentrant_init_deadlocks"
+# required-features = ["std"]
 
-[[example]]
-name = "regex"
-required-features = ["std"]
+# [[example]]
+# name = "regex"
+# required-features = ["std"]
 
-[[example]]
-name = "test_synchronization"
-required-features = ["std"]
+# [[example]]
+# name = "test_synchronization"
+# required-features = ["std"]
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--generate-link-to-definition"]
+
+[dependencies.redis]
+version = "0.11.0"
+
+[dependencies.ntest]
+version = "0.7.5"

@@ -15,3 +15,9 @@ repository = "https://github.com/rapidfuzz/strsim-rs"
 documentation = "https://docs.rs/strsim/"
 exclude = ["/.github", "/dev"]
 categories = ["text-processing"]
+
+[dependencies.redis]
+version = "0.11.0"
+
+[dependencies.ntest]
+version = "0.7.5"

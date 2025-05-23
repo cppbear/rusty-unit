@@ -43,7 +43,7 @@ pub fn hir_analysis(tcx: TyCtxt<'_>) {
         let item = tcx.hir().item(i);
         let def_id = item.owner_id.to_def_id();
         let def_id_to_str = def_id_to_str(def_id, &tcx);
-        println!("def_id_to_str: {:?}", def_id_to_str);
+        println!("def_id_to_str == {:?}", def_id_to_str);
         if def_id_to_str.contains("serde")
             || def_id_to_str ==
                 "map::slice::<impl std::cmp::PartialEq<map::slice::Slice<K2, V2>> for [(K, V); N]>"
@@ -54,6 +54,47 @@ pub fn hir_analysis(tcx: TyCtxt<'_>) {
                 == "set::slice::<impl std::cmp::PartialEq<set::slice::Slice<U>> for [T; N]>"
             || def_id_to_str == "<set::slice::Slice<T> as std::cmp::Eq>"||def_id_to_str=="<set::slice::Slice<T> as std::cmp::PartialOrd>"||def_id_to_str=="<set::IndexSet<T, S> as std::cmp::Eq>"
             || def_id_to_str=="<TryReserveError as std::cmp::Eq>" || def_id_to_str=="<TryReserveErrorKind as std::cmp::Eq>"||def_id_to_str=="<GetDisjointMutError as std::cmp::Eq>"
+            // || def_id_to_str == "read::decoder::{use#5}"
+            // || def_id_to_str == "read::decoder::DecoderReader"
+            // || def_id_to_str == "<read::decoder::DecoderReader<'e, E, R> as std::io::Read>"
+            // || def_id_to_str == "write::encoder::EncoderWriter"
+            // || def_id_to_str == "write::encoder_string_writer::StrConsumer"
+            // || def_id_to_str == "engine::general_purpose::decode::decode_helper"
+            // || def_id_to_str == "engine::general_purpose::decode::complete_quads_len"
+            // || def_id_to_str.contains("engine::general_purpose::decode")
+            // || def_id_to_str == "engine::general_purpose::decode_suffix::{use#6}"
+            // || def_id_to_str == "engine::general_purpose::GeneralPurpose"
+            // || def_id_to_str == "engine::general_purpose::encode_table"
+            // || def_id_to_str == "alphabet::Alphabet"
+            // || def_id_to_str == "<[T; N] as __private::ext::RepAsIteratorExt<'q>>"
+            // || def_id_to_str == "<[T; N] as rng::Fill>"
+            // || def_id_to_str == "<rngs::small::SmallRng as rand_core::SeedableRng>"
+            // || def_id_to_str == "<rngs::mock::StepRng as std::cmp::PartialEq>"
+            // || def_id_to_str == "rngs::xoshiro256plusplus::Xoshiro256PlusPlus"
+            // || def_id_to_str == "rngs::reseeding::ReseedingRng"
+            // || def_id_to_str == "<rngs::xoshiro256plusplus::Xoshiro256PlusPlus as rand_core::SeedableRng>"
+            // || def_id_to_str == "<rngs::std::StdRng as rand_core::SeedableRng>"
+            // || def_id_to_str == "seq::index::sample_array"
+            // || def_id_to_str == "<&'a [u8; N] as regex::bytes::Replacer>"
+            // || def_id_to_str == "<[u8; N] as regex::bytes::Replacer>"
+            // || def_id_to_str == "buffer::Buffer"
+            || def_id_to_str == "<de::impls::ArrayVisitor<[T; 0]> as de::Visitor<'de>>"
+            || def_id_to_str == "de::impls::<impl de::Deserialize<'de> for [T; 0]>"
+            || def_id_to_str == "<de::impls::ArrayVisitor<[T; 1]> as de::Visitor<'de>>"
+            || def_id_to_str == "<de::impls::ArrayInPlaceVisitor<'a, [T; 1]> as de::Visitor<'de>>"
+            || def_id_to_str == "de::impls::<impl de::Deserialize<'de> for [T; 1]>"
+            || def_id_to_str.contains(" as de::Visitor<'de>>")
+            || def_id_to_str.contains("de::impls::<impl de::Deserialize<'de> for ")
+            || def_id_to_str == "<dyn de::Expected as std::fmt::Display>"
+            || def_id_to_str == "ser::impls::<impl ser::Serialize for [T; 0]>"
+            || def_id_to_str.contains("ser::impls::<impl ser::Serialize for [T;")
+            || def_id_to_str == "read::build_hex_table"
+            || def_id_to_str == "HybridGrowingHashmapChar"
+            || def_id_to_str == "<(dyn std::error::Error + 'a) as aserror::AsDynError<'a>>"
+            || def_id_to_str.contains(" + 'a) as aserror::AsDynError<'a>>")
+            || def_id_to_str == "<dyn std::error::Error as aserror::Sealed>"
+            || def_id_to_str == "<dyn std::error::Error + std::marker::Send as aserror::Sealed>"
+            || (def_id_to_str.contains(" as aserror::Sealed>") && def_id_to_str != "<T as aserror::Sealed>")
         {
             continue;
         }
@@ -562,20 +603,28 @@ fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, 
                         .ident()
                         .unwrap()
                         .to_string();
-                    println!("fn name: {:?}", fn_name);
+                    println!("fn_name == {:?}", fn_name);
                     // if fn_name == "static_empty"
                     //     || fn_name == "get_many_mut"
                     //     || fn_name == "get_many_key_value_mut"
                     if fn_name == "get_disjoint_opt_mut"
                         || fn_name == "get_disjoint_mut"
                         || fn_name == "get_disjoint_indices_mut"
+                        || fn_name == "from"
                     {
                         continue;
                     }
                     let parent_name =
                         node_to_name(&tcx.hir().hir_node(parent_hir_id), tcx).unwrap();
-                    println!("parent name: {:?}", parent_name);
-                    if parent_name == "map::HashMap" || parent_name == "set::HashSet" {
+                    println!("parent_name == {:?}", parent_name);
+                    if parent_name == "map::HashMap" || parent_name == "set::HashSet" 
+                    || parent_name == "write::encoder::EncoderWriter"
+                    || parent_name == "rngs::small::SmallRng"
+                    || parent_name == "rngs::reseeding::ReseedingCore"
+                    || parent_name == "regex::bytes::Captures"
+                    || parent_name == "regex::string::Captures"
+                    || parent_name == "value::Value"
+                    {
                         // Skip too hard stuff
                         warn!("HIR: Skipping too hard method");
                         continue;
@@ -611,6 +660,7 @@ fn analyze_impl(im: &Impl, file_path: PathBuf, callables: &mut Vec<RuCallable>, 
                             || parent_name == "map::IndexMap"
                             || parent_name == "set::slice::Slice"
                             || parent_name == "set::IndexSet"
+                            || parent_name == "value::Value"
                         {
                             // Skip too hard stuff
                             warn!("HIR: Skipping serde method");

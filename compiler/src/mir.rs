@@ -926,7 +926,8 @@ impl<'tcx> MirVisitor<'tcx> {
                         };
                     }
                     Rvalue::Len(_) => return Some(ValueDef::Var(*place, self.tcx.types.usize)),
-                    _ => todo!("Value is {:?}", value),
+                    // _ => todo!("Value is {:?}", value),
+                    _ => return None,
                 }
             }
             SetDiscriminant { place, .. } => {

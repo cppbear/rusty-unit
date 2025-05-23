@@ -156,7 +156,7 @@
 // Restrictions
 #![deny(clippy::question_mark_used)]
 // Rustc lints.
-#![deny(missing_docs, unused_imports)]
+// #![deny(missing_docs, unused_imports)]
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -347,3 +347,6 @@ pub use serde_derive::{Deserialize, Serialize};
 mod actually_private {
     pub struct T;
 }
+
+pub use ntest::timeout;
+pub mod rusty_monitor;
